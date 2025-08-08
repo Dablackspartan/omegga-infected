@@ -1,0 +1,113 @@
+{
+  "name": "Infected / Zombies (Omegga)",
+  "description": "Round-based Infected (Zombies) gamemode scaffold: auto minigame, roles & loadouts, team tint, round timer, optional sounds, and persistent stats.",
+  "author": "chatgpt-assistant",
+  "config": {
+    "authorized-users": {
+      "description": "Admins allowed to run admin-only commands",
+      "type": "players",
+      "default": []
+    },
+    "round-seconds": {
+      "description": "Round length in seconds",
+      "type": "number",
+      "default": 300
+    },
+    "survivor-weapon": {
+      "description": "Item/weapon name given to survivors (leave blank to no-op)",
+      "type": "string",
+      "default": ""
+    },
+    "infected-knife": {
+      "description": "Melee item given to infected (leave blank to no-op)",
+      "type": "string",
+      "default": ""
+    },
+    "bonus-weapon": {
+      "description": "Temporary bonus for the first infected until first survivor death (leave blank to no-op)",
+      "type": "string",
+      "default": ""
+    },
+    "team-color-enabled": {
+      "description": "Put zombies on a green-tinted team (best-effort)",
+      "type": "boolean",
+      "default": true
+    },
+    "green-tint-enabled": {
+      "description": "Apply green tint to infected (best-effort)",
+      "type": "boolean",
+      "default": true
+    },
+    "green-tint-amount": {
+      "description": "Green tint intensity (0.0 - 1.0)",
+      "type": "number",
+      "default": 0.7
+    },
+    "enable-sounds": {
+      "description": "Play local sounds on role changes (best-effort)",
+      "type": "boolean",
+      "default": false
+    },
+    "sound-become-zombie": {
+      "description": "Sound to play when becoming a zombie (asset path, blank=no-op)",
+      "type": "string",
+      "default": ""
+    },
+    "sound-spawn-survivor": {
+      "description": "Sound to play when spawning as a survivor (asset path, blank=no-op)",
+      "type": "string",
+      "default": ""
+    },
+    "sound-spawn-infected": {
+      "description": "Sound to play when spawning as an infected (asset path, blank=no-op)",
+      "type": "string",
+      "default": ""
+    },
+    "minigame-template": {
+      "description": "Path to the blank minigame preset file to replace later",
+      "type": "string",
+      "default": "data/blank-minigame.json"
+    },
+    "timer-visible": {
+      "description": "Print round timer updates to players",
+      "type": "boolean",
+      "default": true
+    },
+    "start-on-create": {
+      "description": "Start a round immediately after !infected createminigame",
+      "type": "boolean",
+      "default": true
+    },
+    "enable-kill-tracking": {
+      "description": "Enable best-effort kill tracking (off by default)",
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "commands": [
+    {
+      "name": "!infected createminigame",
+      "description": "Create/setup the Infected minigame from the blank template and (optionally) start a round (admin-only).",
+      "example": "!infected createminigame",
+      "args": []
+    },
+    {
+      "name": "!infected status",
+      "description": "Show round state, counts, and timer.",
+      "example": "!infected status",
+      "args": []
+    },
+    {
+      "name": "!infected startround",
+      "description": "Start a round (admin-only).",
+      "example": "!infected startround",
+      "args": []
+    },
+    {
+      "name": "!infected endround",
+      "description": "Force end the current round (admin-only).",
+      "example": "!infected endround",
+      "args": []
+    }
+  ]
+}

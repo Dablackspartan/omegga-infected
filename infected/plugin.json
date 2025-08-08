@@ -1,0 +1,6 @@
+{
+  "formatVersion": 1,
+  "omeggaVersion": ">=0.1.32",
+  "emitConfig": "config.json",
+  "type": "safe"
+}
