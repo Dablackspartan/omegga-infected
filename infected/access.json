@@ -1,6 +1,0 @@
-{
-  "external": [
-    "fs",
-    "path"
-  ]
-}
