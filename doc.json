@@ -28,6 +28,11 @@
       "type": "string",
       "default": ""
     },
+    "mid-join-assign-infected": {
+      "description": "When enabled, players who join mid-round are auto-assigned to Infected.",
+      "type": "boolean",
+      "default": true
+    },
     "team-color-enabled": {
       "description": "Put zombies on a green-tinted team (best-effort)",
       "type": "boolean",
