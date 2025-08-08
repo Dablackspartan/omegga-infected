@@ -9,7 +9,7 @@
       "default": []
     },
     "minigame-name": {
-      "description": "Name of the minigame/preset (blank = derive from preset file)",
+      "description": "Preset/minigame name (blank = derive from infected.bp)",
       "type": "string",
       "default": ""
     },
@@ -92,19 +92,19 @@
   "commands": [
     {
       "name": "!infected createminigame",
-      "description": "Setup/bind the minigame (admin).",
+      "description": "Setup/bind (admin).",
       "example": "!infected createminigame",
       "args": []
     },
     {
       "name": "!infected startround",
-      "description": "Start a round (admin).",
+      "description": "Start round (admin).",
       "example": "!infected startround",
       "args": []
     },
     {
       "name": "!infected endround",
-      "description": "End the round (admin).",
+      "description": "End round (admin).",
       "example": "!infected endround",
       "args": []
     },

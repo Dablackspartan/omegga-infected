@@ -13,6 +13,8 @@ function log(...args) { try { Omegga?.log?.(PLUGIN_NAME + ':', ...args); } catch
 function warn(...args) { try { Omegga?.warn?.(PLUGIN_NAME + ':', ...args); } catch (e) {} }
 function error(...args) { try { Omegga?.error?.(PLUGIN_NAME + ':', ...args); } catch (e) {} }
 
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 async function safeTry(tag, fn) {
   try { return await fn(); }
   catch (e) { error(`[${tag}]`, e && e.stack ? e.stack : e); }
@@ -54,45 +56,39 @@ function withDefaults(cfg) {
   return c;
 }
 
-// ----- preset dir detection -----
-function candidatesForPresetDir() {
-  const paths = [];
-  const cwd = process.cwd();
-  const home = process.env.HOME || process.env.USERPROFILE;
-  const localapp = process.env.LOCALAPPDATA;
-
-  // Common dedicated layouts
-  paths.push(path.join(cwd, 'Saved', 'Presets', 'Minigames'));
-  paths.push(path.join(cwd, 'Brickadia', 'Saved', 'Presets', 'Minigames'));
-  paths.push(path.join(path.dirname(cwd), 'Saved', 'Presets', 'Minigames'));
-  paths.push(path.join('/home/container', 'Saved', 'Presets', 'Minigames'));
-  paths.push(path.join('/home/container', 'Brickadia', 'Saved', 'Presets', 'Minigames'));
-
-  // Windows user profile
-  if (localapp) paths.push(path.join(localapp, 'Brickadia', 'Saved', 'Presets', 'Minigames'));
-  // Linux launcher
-  if (home) paths.push(path.join(home, '.local', 'share', 'Brickadia', 'Saved', 'Presets', 'Minigames'));
-
-  // De-duplicate while preserving order
-  const seen = new Set();
-  return paths.filter(p => { const k = path.normalize(p); if (seen.has(k)) return false; seen.add(k); return true; });
+// ----- generic output helpers -----
+function stripOut(s='') {
+  return String(s)
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .replace(/\r/g, '')
+    .replace(/[^\S\r\n]+$/gm, '')
+    .replace(/^\s*minigameevents\s*>>\s*/gmi, '')
+    .trim();
+}
+function looksLikeError(out='') {
+  return /unknown|invalid|error|usage|not found|failed/i.test(String(out));
 }
 
-function resolvePresetDir() {
-  const list = candidatesForPresetDir();
-  for (const p of list) {
-    try {
-      const parent = path.dirname(p);
-      if (fs.existsSync(parent) || fs.existsSync(path.dirname(parent))) {
-        fs.mkdirSync(p, { recursive: true });
-        return p;
-      }
-    } catch (e) { /* try next */ }
+// breadth-first search for a filename under a set of roots
+function findFile(startDirs, targetBasename, maxDepth = 6) {
+  const seen = new Set();
+  const q = startDirs.map(d => ({d, depth:0}));
+  while (q.length) {
+    const {d, depth} = q.shift();
+    if (depth > maxDepth || !d) continue;
+    const key = path.normalize(d);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    let ents = [];
+    try { ents = fs.readdirSync(d, {withFileTypes:true}); } catch { continue; }
+    for (const ent of ents) {
+      const full = path.join(d, ent.name);
+      if (ent.isFile() && ent.name === targetBasename) return full;
+      if (ent.isDirectory()) q.push({d: full, depth: depth+1});
+    }
   }
-  // Last resort: create under CWD
-  const fallback = path.join(process.cwd(), 'Saved', 'Presets', 'Minigames');
-  try { fs.mkdirSync(fallback, { recursive: true }); } catch (_) {}
-  return fallback;
+  return null;
 }
 
 module.exports = class InfectedPlugin {
@@ -115,23 +111,13 @@ module.exports = class InfectedPlugin {
     this.boundMinigame = null;
   }
 
-  // ---- helpers for exec and minigame discovery ----
+  // ---- command exec & parsing ----
   async execOut(cmd) {
     try { return await this.omegga.exec?.(cmd); } catch { return ''; }
   }
 
-  stripOut(s='') {
-    return String(s)
-      .replace(/\x1b\[[0-9;]*m/g, '')
-      .replace(/\u001b\[[0-9;]*m/g, '')
-      .replace(/\r/g, '')
-      .replace(/[^\S\r\n]+$/gm, '')
-      .replace(/^\s*minigameevents\s*>>\s*/gmi, '')
-      .trim();
-  }
-
   parseMiniLine(line) {
-    const s = this.stripOut(line);
+    const s = stripOut(line);
     let m = s.match(/^\s*(?:Index\s*)?(\d+)\s*(?:[\]\:\-])\s*(.+?)\s*$/i);
     if (m) return { index: Number(m[1]), name: m[2].trim() };
     m = s.match(/^\s*\[\s*(\d+)\s*\]\s*(.+?)\s*$/);
@@ -141,16 +127,12 @@ module.exports = class InfectedPlugin {
     return null;
   }
 
-  looksLikeError(out='') {
-    return /unknown|invalid|error|usage|not found|failed/i.test(String(out));
-  }
-
   async listMinigames() {
     const outs = [];
     outs.push(await this.execOut('Server.Minigames.List'));
     outs.push(await this.execOut('Minigame.List'));
     outs.push(await this.execOut('Chat.Command Minigame.List'));
-    const lines = this.stripOut(outs.filter(Boolean).join('\n')).split(/\r?\n/);
+    const lines = stripOut(outs.filter(Boolean).join('\n')).split(/\r?\n/);
     const results = [];
     for (const ln of lines) {
       const p = this.parseMiniLine(ln);
@@ -159,6 +141,12 @@ module.exports = class InfectedPlugin {
     const seen = new Set(); const list = [];
     for (const x of results) if (!seen.has(x.index)) { seen.add(x.index); list.push(x); }
     return list;
+  }
+
+  async ensureExistsByName(targetName) {
+    const list = await this.listMinigames();
+    const hit = list.find(m => m.name.toLowerCase() === String(targetName).toLowerCase());
+    return hit || null;
   }
 
   getPresetName() {
@@ -171,51 +159,77 @@ module.exports = class InfectedPlugin {
     return name;
   }
 
-  async ensureExistsByName(targetName) {
-    const list = await this.listMinigames();
-    const hit = list.find(m => m.name.toLowerCase() === String(targetName).toLowerCase());
-    return hit || null;
-  }
+  // ---- detect the actual presets directory by saving a probe ----
+  async detectMinigamePresetDir() {
+    const probeName = `_infected_probe_${Date.now()}`;
+    const cmd = `Server.Minigames.SavePreset 0 "${probeName}"`;
+    const out = await this.execOut(cmd);
+    if (looksLikeError(out)) warn('SavePreset probe returned:', out);
+    await sleep(500);
 
-  async ensureBoundMinigame() {
-    const name = this.getPresetName();
-    const hit = await this.ensureExistsByName(name);
-    if (hit) {
-      this.boundMinigame = hit;
-      log('bound to existing minigame:', hit.index, hit.name);
-      return true;
+    // Search likely roots for the probe file
+    const roots = [
+      process.cwd(),
+      path.join(process.cwd(), 'Brickadia'),
+      '/home/container',
+      process.env.HOME,
+      process.env.USERPROFILE,
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Brickadia'),
+      process.env.HOME && path.join(process.env.HOME, '.local', 'share'),
+    ].filter(Boolean);
+
+    const found = findFile(roots, `${probeName}.bp`, 6);
+    if (!found) {
+      warn('probe preset not found; falling back to ./Saved/Presets/Minigames');
+      const fallback = path.join(process.cwd(), 'Saved', 'Presets', 'Minigames');
+      try { fs.mkdirSync(fallback, { recursive: true }); } catch {}
+      return fallback;
     }
-    return false;
+
+    // cleanup the probe
+    try { fs.unlinkSync(found); } catch {}
+    const dir = path.dirname(found);
+    log('detected Minigame Presets dir:', dir);
+    return dir;
   }
 
-  // Copy preset into Brickadia's preset folder and load it
-  async importPreset() {
+  // ---- import from plugin data and load by name (robust) ----
+  async importAndLoadPreset() {
     const name = this.getPresetName();
     const src = (this.config['preset-source'] || DEFAULT_PRESET_SOURCE);
-    try {
-      if (!fs.existsSync(src)) {
-        warn('preset source not found:', src);
-        return false;
-      }
-      const targetDir = resolvePresetDir();
-      const targetFile = path.join(targetDir, `${name}.bp`);
-      fs.copyFileSync(src, targetFile);
-      log('copied preset', src, '->', targetFile);
+    if (!fs.existsSync(src)) {
+      warn('preset source not found:', src);
+      return false;
+    }
 
-      const out = await this.execOut(`Server.Minigames.LoadPreset "${name}"`);
-      if (this.looksLikeError(out)) warn('LoadPreset returned:', out);
-      const hit = await this.ensureExistsByName(name);
+    const presetDir = await this.detectMinigamePresetDir();
+    try { fs.mkdirSync(presetDir, { recursive: true }); } catch {}
+
+    // Copy as both Infected.bp and infected.bp to dodge case issues
+    const targets = [
+      path.join(presetDir, `${name}.bp`),
+      path.join(presetDir, `${name.toLowerCase()}.bp`),
+      path.join(presetDir, `${name[0].toUpperCase()}${name.slice(1)}.bp`),
+    ];
+    for (const t of targets) {
+      try { fs.copyFileSync(src, t); log('copied preset to', t); } catch (e) { warn('copy failed', t, e); }
+    }
+
+    // Try several likely load names
+    const candidates = Array.from(new Set([name, name.toLowerCase(), name[0].toUpperCase()+name.slice(1), 'Infected', 'infected']));
+    for (const n of candidates) {
+      const out = await this.execOut(`Server.Minigames.LoadPreset "${n}"`);
+      if (looksLikeError(out)) warn('LoadPreset returned:', out);
+      await sleep(400);
+      const hit = await this.ensureExistsByName(n);
       if (hit) {
         this.boundMinigame = hit;
         log('loaded & bound preset:', hit.index, hit.name);
         return true;
       }
-      warn('preset load verification failed (not found after load):', name);
-      return false;
-    } catch (e) {
-      error('importPreset', e);
-      return false;
     }
+    warn('preset load verification failed for names:', candidates.join(', '));
+    return false;
   }
 
   // ---- lifecycle ----
@@ -315,25 +329,25 @@ module.exports = class InfectedPlugin {
     } else {
       let ok = false;
 
-      // A) Import from plugin /data and LoadPreset (auto dir discovery)
-      const imported = await this.importPreset();
+      // A) Import from plugin /data into detected presets dir and LoadPreset
+      const imported = await this.importAndLoadPreset();
       if (imported) ok = true;
 
-      // B) LoadPreset by name anyway (in case the preset already existed under same name)
+      // B) LoadPreset by name anyway (in case the preset already existed under same/alt case name)
       if (!ok) {
         const out = await this.execOut(`Server.Minigames.LoadPreset "${name}"`);
-        if (this.looksLikeError(out)) warn('LoadPreset returned:', out);
+        if (looksLikeError(out)) warn('LoadPreset returned:', out);
         const hit = await this.ensureExistsByName(name);
         if (hit) { this.boundMinigame = hit; ok = true; }
       }
 
-      // C) direct console create
+      // C) direct console create (legacy)
       if (!ok) {
         try {
           const a = await this.execOut(`Minigame.Create "${name}"`);
           const b = await this.execOut(`Minigame.AddTeam "${name}" "${teams[0]}"`);
           const c = await this.execOut(`Minigame.AddTeam "${name}" "${teams[1]}"`);
-          if (this.looksLikeError(a+b+c)) throw new Error('Minigame.Create path failed');
+          if (looksLikeError(a+b+c)) throw new Error('Minigame.Create path failed');
           const hit = await this.ensureExistsByName(name);
           if (hit) { this.boundMinigame = hit; ok = true; }
         } catch (e) { error('create path A failed', e); }
@@ -356,14 +370,14 @@ module.exports = class InfectedPlugin {
           const a = await this.execOut(`Chat.Command Minigame.Create "${name}"`);
           const b = await this.execOut(`Chat.Command Minigame.AddTeam "${name}" "${teams[0]}"`);
           const c = await this.execOut(`Chat.Command Minigame.AddTeam "${name}" "${teams[1]}"`);
-          if (this.looksLikeError(a+b+c)) throw new Error('Chat.Command path failed');
+          if (looksLikeError(a+b+c)) throw new Error('Chat.Command path failed');
           const hit = await this.ensureExistsByName(name);
           if (hit) { this.boundMinigame = hit; ok = true; }
         } catch (e) { error('create path C chat failed', e); }
       }
 
       if (!ok) {
-        this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create/load "${name}". Ensure the server can load presets and try again.`);
+        this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create/load "${name}". Check console logs for detected preset dir and copy/load steps.`);
         return;
       }
     }
