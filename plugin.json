@@ -1,5 +1,10 @@
 {
+  "name": "Infected / Zombies (Omegga)",
+  "description": "Infected/Zombies gamemode with robust preset import and binding.",
+  "author": "chatgpt-assistant",
+  "version": "0.7.3",
   "formatVersion": 1,
   "omeggaVersion": ">=0.1.32",
+  "type": "safe",
   "emitConfig": "config.json"
 }
