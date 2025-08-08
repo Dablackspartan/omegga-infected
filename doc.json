@@ -1,55 +1,65 @@
 {
   "name": "Infected / Zombies (Omegga)",
-  "description": "Infected (Zombies) minigame scaffold. Auto-binds to 'Infected'.",
-  "author": "chatgpt-dev-assist",
+  "description": "Infected gamemode with auto preset import (case-insensitive), multi-dir copy, auto-bind, mid-join -> infected, tint, optional sounds, and persistent stats. Logs go to raw console.",
+  "author": "chatgpt-assistant",
   "config": {
     "authorized-users": {
-      "description": "Admins allowed to use admin commands",
-      "type": "list",
+      "description": "Admins allowed to run admin-only commands",
+      "type": "players",
       "default": []
     },
+    "minigame-name": {
+      "description": "Preset/minigame name (blank = derive from preset file)",
+      "type": "string",
+      "default": ""
+    },
+    "preset-source": {
+      "description": "Preset file in /data (blank = auto-detect infected.bp / Infected.bp)",
+      "type": "string",
+      "default": ""
+    },
     "round-seconds": {
-      "description": "Round length (sec)",
+      "description": "Round length (seconds)",
       "type": "number",
       "default": 300
     },
     "survivor-weapon": {
-      "description": "Survivor firearm (item name)",
+      "description": "Survivor weapon (blank = none)",
       "type": "string",
       "default": ""
     },
     "infected-knife": {
-      "description": "Infected melee (item name)",
+      "description": "Infected melee (blank = none)",
       "type": "string",
       "default": ""
     },
     "bonus-weapon": {
-      "description": "First-infected bonus (item name)",
+      "description": "First infected bonus until first blood (blank = none)",
       "type": "string",
       "default": ""
     },
     "team-color-enabled": {
-      "description": "Use team tint",
+      "description": "Green-tint zombies",
       "type": "boolean",
       "default": true
     },
     "green-tint-enabled": {
-      "description": "Tint infected green",
+      "description": "Apply tint",
       "type": "boolean",
       "default": true
     },
     "green-tint-amount": {
-      "description": "Tint amount 0..1",
+      "description": "Tint intensity (0-1)",
       "type": "number",
-      "default": 0.35
+      "default": 0.7
     },
     "enable-sounds": {
-      "description": "Play sounds on events",
+      "description": "Play local sounds",
       "type": "boolean",
       "default": false
     },
     "sound-become-zombie": {
-      "description": "Sound on infection",
+      "description": "Sound on infect",
       "type": "string",
       "default": ""
     },
@@ -58,43 +68,57 @@
       "type": "string",
       "default": ""
     },
-    "sound-spawn-zombie": {
-      "description": "Sound on zombie spawn",
+    "sound-spawn-infected": {
+      "description": "Sound on infected spawn",
       "type": "string",
       "default": ""
     },
-    "minigame-template": {
-      "description": "Preset .bp to import (leave default)",
-      "type": "string",
-      "default": "plugins/infected/data/Infected.bp"
-    },
     "start-on-create": {
-      "description": "Start round immediately after create",
+      "description": "Auto-start after create",
       "type": "boolean",
-      "default": false
+      "default": true
     },
     "enable-kill-tracking": {
-      "description": "Parse killfeed (experimental)",
+      "description": "Track kills (best-effort)",
       "type": "boolean",
       "default": false
+    },
+    "mid-join-assign-infected": {
+      "description": "Join mid-round -> infected",
+      "type": "boolean",
+      "default": true
     }
   },
   "commands": [
     {
       "name": "!infected createminigame",
-      "description": "Create/bind minigame from preset"
-    },
-    {
-      "name": "!infected status",
-      "description": "Show plugin status"
+      "description": "Setup/bind (admin).",
+      "example": "!infected createminigame",
+      "args": []
     },
     {
       "name": "!infected startround",
-      "description": "Force start (admin)"
+      "description": "Start round (admin).",
+      "example": "!infected startround",
+      "args": []
     },
     {
       "name": "!infected endround",
-      "description": "Force end (admin)"
+      "description": "End round (admin).",
+      "example": "!infected endround",
+      "args": []
+    },
+    {
+      "name": "!infected status",
+      "description": "Show state.",
+      "example": "!infected status",
+      "args": []
+    },
+    {
+      "name": "!infected bindminigame <index|name N>",
+      "description": "Bind by index or name (admin).",
+      "example": "!infected bindminigame name Infected",
+      "args": []
     }
   ]
 }

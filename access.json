@@ -1,11 +1,4 @@
-{
-  "script": "omegga.plugin.js",
-  "nodevm": {
-    "require": {
-      "list": [
-        "fs",
-        "path"
-      ]
-    }
-  }
-}
+[
+  "fs",
+  "path"
+]
