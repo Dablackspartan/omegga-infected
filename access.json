@@ -1,6 +1,1 @@
-{
-  "external": [
-    "fs",
-    "path"
-  ]
-}
+["fs","path"]
