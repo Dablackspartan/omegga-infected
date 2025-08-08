@@ -1,16 +1,14 @@
 // omegga.plugin.js
-// Infected / Zombies Gamemode for Brickadia via Omegga (Node VM safe)
 /* eslint-disable no-undef */
 const fs = require('fs');
 const path = require('path');
 
 const PLUGIN_NAME = 'infected';
 const DATA_DIR = __dirname ? path.join(__dirname, 'data') : 'data';
-const TEMPLATE_FILE = path.join(DATA_DIR, 'blank-minigame.json');
+const DEFAULT_PRESET_SOURCE = path.join(DATA_DIR, 'Infected.bp');
 const STATS_KEY = 'infected_stats_v1';
 
 function nowSec() { return Math.floor(Date.now() / 1000); }
-
 function log(...args) { try { Omegga?.log?.(PLUGIN_NAME + ':', ...args); } catch (e) {} }
 function warn(...args) { try { Omegga?.warn?.(PLUGIN_NAME + ':', ...args); } catch (e) {} }
 function error(...args) { try { Omegga?.error?.(PLUGIN_NAME + ':', ...args); } catch (e) {} }
@@ -20,8 +18,8 @@ async function safeTry(tag, fn) {
   catch (e) { error(`[${tag}]`, e && e.stack ? e.stack : e); }
 }
 
-function choice(arr) {
-  if (!arr || !arr.length) return null;
+function choiceIndex(arr) {
+  if (!arr || !arr.length) return -1;
   return Math.floor(Math.random() * arr.length);
 }
 
@@ -39,15 +37,18 @@ function withDefaults(cfg) {
     'sound-become-zombie': '',
     'sound-spawn-survivor': '',
     'sound-spawn-infected': '',
-    'minigame-template': 'data/blank-minigame.json',
     'timer-visible': true,
     'start-on-create': true,
     'enable-kill-tracking': false,
     'team-color-enabled': true,
-    'mid-join-assign-infected': true
+    'mid-join-assign-infected': true,
+    'preset-import-enabled': true,
+    'preset-source': 'data/Infected.bp',
+    'preset-target-dir': ''
   }, cfg || {});
-  if (c['minigame-template'] && !path.isAbsolute(c['minigame-template'])) {
-    c['minigame-template'] = path.join(DATA_DIR, path.basename(c['minigame-template']));
+
+  if (c['preset-source'] && !path.isAbsolute(c['preset-source'])) {
+    c['preset-source'] = path.join(DATA_DIR, path.basename(c['preset-source']));
   }
   return c;
 }
@@ -69,12 +70,32 @@ module.exports = class InfectedPlugin {
     this.playerState = new Map();
     this.stats = { players: {} };
 
-    this.boundMinigame = null; // {index, name} when detected
+    this.boundMinigame = null;
   }
 
-  // ---- helpers for exec and minigame discovery ----
   async execOut(cmd) {
     try { return await this.omegga.exec?.(cmd); } catch { return ''; }
+  }
+
+  stripOut(s='') {
+    return String(s)
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .replace(/\u001b\[[0-9;]*m/g, '')
+      .replace(/\r/g, '')
+      .replace(/[^\S\r\n]+$/gm, '')
+      .replace(/^\s*minigameevents\s*>>\s*/gmi, '')
+      .trim();
+  }
+
+  parseMiniLine(line) {
+    const s = this.stripOut(line);
+    let m = s.match(/^\s*(?:Index\s*)?(\d+)\s*(?:[\]\:\-])\s*(.+?)\s*$/i);
+    if (m) return { index: Number(m[1]), name: m[2].trim() };
+    m = s.match(/^\s*\[\s*(\d+)\s*\]\s*(.+?)\s*$/);
+    if (m) return { index: Number(m[1]), name: m[2].trim() };
+    m = s.match(/index\s*[:=]\s*(\d+).+?name\s*[:=]\s*['"]([^'"]+)['"]/i);
+    if (m) return { index: Number(m[1]), name: m[2].trim() };
+    return null;
   }
 
   looksLikeError(out='') {
@@ -82,22 +103,24 @@ module.exports = class InfectedPlugin {
   }
 
   async listMinigames() {
-    // Uses Server.Minigames.List (modern builds). Gracefully returns [] if unsupported.
-    const out = await this.execOut('Server.Minigames.List');
-    const lines = String(out || '').split(/\r?\n/);
-    const list = [];
-    for (const line of lines) {
-      // Try to parse formats like:
-      // "[0] Infected", "0: Infected", "0 - Infected"
-      const m = line.match(/(?:\[)?(\d+)(?:\])?[^A-Za-z0-9_-]*([A-Za-z0-9 ._\-\[\]\(\)]+)/);
-      if (m) list.push({ index: Number(m[1]), name: m[2].trim() });
+    const outs = [];
+    outs.push(await this.execOut('Server.Minigames.List'));
+    outs.push(await this.execOut('Minigame.List'));
+    outs.push(await this.execOut('Chat.Command Minigame.List'));
+    const lines = this.stripOut(outs.filter(Boolean).join('\n')).split(/\r?\n/);
+    const results = [];
+    for (const ln of lines) {
+      const p = this.parseMiniLine(ln);
+      if (p && Number.isInteger(p.index) && p.name) results.push(p);
     }
+    const seen = new Set(); const list = [];
+    for (const x of results) if (!seen.has(x.index)) { seen.add(x.index); list.push(x); }
     return list;
   }
 
   async ensureExistsByName(targetName) {
     const list = await this.listMinigames();
-    const hit = list.find(m => m.name.toLowerCase() === targetName.toLowerCase());
+    const hit = list.find(m => m.name.toLowerCase() === String(targetName).toLowerCase());
     return hit || null;
   }
 
@@ -112,42 +135,53 @@ module.exports = class InfectedPlugin {
     return false;
   }
 
-  // ---- lifecycle ----
+  async importPresetByConfig() {
+    const name = (this.config['minigame-name'] || 'Infected').trim() || 'Infected';
+    const src = (this.config['preset-source'] || DEFAULT_PRESET_SOURCE);
+    const targetDir = (this.config['preset-target-dir'] || '').trim();
+    if (!targetDir) {
+      warn('preset-import enabled but preset-target-dir is not set.');
+      return false;
+    }
+    try {
+      if (!fs.existsSync(src)) {
+        warn('preset source not found:', src);
+        return false;
+      }
+      fs.mkdirSync(targetDir, { recursive: true });
+      const targetFile = path.join(targetDir, `${name}.bp`);
+      fs.copyFileSync(src, targetFile);
+      log('copied preset', src, '->', targetFile);
+
+      const out = await this.execOut(`Server.Minigames.LoadPreset "${name}"`);
+      if (this.looksLikeError(out)) warn('LoadPreset returned:', out);
+      const hit = await this.ensureExistsByName(name);
+      if (hit) {
+        this.boundMinigame = hit;
+        log('loaded & bound preset:', hit.index, hit.name);
+        return true;
+      }
+      warn('preset load verification failed (not found after load):', name);
+      return false;
+    } catch (e) {
+      error('importPresetByConfig', e);
+      return false;
+    }
+  }
+
   async init() {
     log('initializing plugin...');
 
-    await safeTry('ensure-template', async () => {
-      const exists = fs.existsSync(TEMPLATE_FILE);
-      if (!exists) {
-        const blank = {
-          name: "Infected_Minigrame_Template",
-          description: "Replace this JSON with your own minigame preset if your server supports loading presets from file. This file is only a placeholder.",
-          createdAt: new Date().toISOString(),
-          teams: [
-            { name: "Survivors", color: [1,1,1], capacity: 0 },
-            { name: "Infected", color: [0.2, 0.8, 0.2], capacity: 0 }
-          ],
-          rules: { friendlyFire: false, allowRespawn: true }
-        };
-        fs.writeFileSync(TEMPLATE_FILE, JSON.stringify(blank, null, 2));
-      }
-    });
-
-    await safeTry('load-stats', async () => {
+    try {
       const s = await this.store.get(STATS_KEY);
       if (s && typeof s === 'object') this.stats = s;
-    });
+    } catch(e) { error('load-stats', e); }
 
-    // Auto-bind if a minigame named "Infected" (or config name) already exists
     await this.ensureBoundMinigame();
 
-    // Commands
     this.omegga.on('chatcmd:infected', (speaker, ...args) => this.onCommand(speaker, args));
-
-    // Mid-round join handling
     this.omegga.on('join', (player) => this.onJoin(player));
 
-    // Tick loop
     this.roundTimer = setInterval(() => this.tick().catch(e => error('tick', e)), 500);
 
     log('initialized.');
@@ -156,36 +190,35 @@ module.exports = class InfectedPlugin {
 
   async stop() {
     if (this.roundTimer) clearInterval(this.roundTimer);
-    await safeTry('save-stats', async () => this.store.set(STATS_KEY, this.stats));
+    try { await this.store.set(STATS_KEY, this.stats); } catch(e) { error('save-stats', e); }
     log('stopped.');
   }
 
-  // ---- events ----
   async onJoin(player) {
     try {
       if (!this.roundActive) return;
       if (!this.config['mid-join-assign-infected']) return;
       if (!player || !player.id || !player.name) return;
 
-      // Track and convert shortly after join so they’re fully spawned
-      if (!this.playerState.has(player.id)) this.playerState.set(player.id, { name: player.name, isDead: false, becameInfectedAt: 0, survivalStartAt: 0 });
+      if (!this.playerState.has(player.id)) {
+        this.playerState.set(player.id, { name: player.name, isDead: false, becameInfectedAt: 0, survivalStartAt: 0 });
+      }
       setTimeout(() => {
         this.becomeInfected({ id: player.id, name: player.name }).catch(e => error('onJoin->becomeInfected', e));
         this.omegga.whisper(player.name, '<b><color="22ff22">[Infected]</> You joined mid-round and were added to the Infected.</b>');
       }, 1000);
-    } catch (e) {
-      error('onJoin', e);
-    }
+    } catch (e) { error('onJoin', e); }
   }
 
-  // ---- commands ----
   async onCommand(speaker, args) {
     const sub = (args[0] || '').toLowerCase();
     if (!sub) return this.help(speaker);
 
     if (sub === 'status') return this.statusCmd(speaker);
     if (sub === 'createminigame') return this.createMinigameCmd(speaker);
-    if (sub === 'bindminigame') return this.bindMinigameCmd(speaker, args[1]);
+    if (sub === 'bindminigame') return this.bindMinigameCmd(speaker, args[1], args[2]);
+    if (sub === 'importpreset') return this.importPresetCmd(speaker);
+    if (sub === 'debuglist') return this.debugListCmd(speaker);
 
     if (sub === 'startround') return this.startRoundCmd(speaker);
     if (sub === 'endround') return this.endRoundCmd(speaker, 'forced');
@@ -195,8 +228,9 @@ module.exports = class InfectedPlugin {
 
   async help(speaker) {
     this.omegga.whisper(speaker, 'Infected plugin commands:');
-    this.omegga.whisper(speaker, '!infected createminigame - create/setup or bind to minigame (admin only)');
-    this.omegga.whisper(speaker, '!infected bindminigame <index> - bind to existing minigame (admin only)');
+    this.omegga.whisper(speaker, '!infected createminigame - create/setup (or import+load) and bind to minigame (admin only)');
+    this.omegga.whisper(speaker, '!infected importpreset - copy preset from plugin /data and LoadPreset (admin only)');
+    this.omegga.whisper(speaker, '!infected bindminigame <index>  — or —  !infected bindminigame name <PresetName>');
     this.omegga.whisper(speaker, '!infected status - show current state');
     this.omegga.whisper(speaker, '!infected startround - start a round (admin only)');
     this.omegga.whisper(speaker, '!infected endround - end current round (admin only)');
@@ -225,77 +259,114 @@ module.exports = class InfectedPlugin {
     const name = (this.config['minigame-name'] || 'Infected').trim() || 'Infected';
     const teams = ['Survivors', 'Infected'];
 
-    // If it already exists, bind and move on
     const existing = await this.ensureExistsByName(name);
     if (existing) {
       this.boundMinigame = existing;
       this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Minigame "${name}" exists (index ${existing.index}). Bound to it.`);
     } else {
-      // Try 3 creation paths, verify after each
-      const attempts = [
-        async () => {
-          log('createMinigame: trying direct console commands...');
+      let ok = false;
+
+      if (this.config['preset-import-enabled']) {
+        const imported = await this.importPresetByConfig();
+        if (imported) ok = true;
+      }
+
+      if (!ok) {
+        const out = await this.execOut(`Server.Minigames.LoadPreset "${name}"`);
+        if (this.looksLikeError(out)) warn('LoadPreset returned:', out);
+        const hit = await this.ensureExistsByName(name);
+        if (hit) { this.boundMinigame = hit; ok = true; }
+      }
+
+      if (!ok) {
+        try {
           const a = await this.execOut(`Minigame.Create "${name}"`);
           const b = await this.execOut(`Minigame.AddTeam "${name}" "${teams[0]}"`);
           const c = await this.execOut(`Minigame.AddTeam "${name}" "${teams[1]}"`);
           if (this.looksLikeError(a+b+c)) throw new Error('Minigame.Create path failed');
-        },
-        async () => {
+          const hit = await this.ensureExistsByName(name);
+          if (hit) { this.boundMinigame = hit; ok = true; }
+        } catch (e) { error('create path A failed', e); }
+      }
+
+      if (!ok) {
+        try {
           if (typeof this.omegga.createMinigame === 'function') {
-            log('createMinigame: trying omegga.createMinigame API...');
             await this.omegga.createMinigame?.({ name, teams });
-          } else {
-            throw new Error('createMinigame API not available');
+            const hit = await this.ensureExistsByName(name);
+            if (hit) { this.boundMinigame = hit; ok = true; }
           }
-        },
-        async () => {
-          log('createMinigame: trying Chat.Command fallback...');
+        } catch (e) { error('create path B API failed', e); }
+      }
+
+      if (!ok) {
+        try {
           const a = await this.execOut(`Chat.Command Minigame.Create "${name}"`);
           const b = await this.execOut(`Chat.Command Minigame.AddTeam "${name}" "${teams[0]}"`);
           const c = await this.execOut(`Chat.Command Minigame.AddTeam "${name}" "${teams[1]}"`);
           if (this.looksLikeError(a+b+c)) throw new Error('Chat.Command path failed');
-        },
-      ];
-
-      let ok = false;
-      for (const attempt of attempts) {
-        try {
-          await attempt();
           const hit = await this.ensureExistsByName(name);
-          if (hit) { this.boundMinigame = hit; ok = true; break; }
-        } catch (e) { error('createMinigame attempt failed', e); }
+          if (hit) { this.boundMinigame = hit; ok = true; }
+        } catch (e) { error('create path C chat failed', e); }
       }
 
       if (!ok) {
-        this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create minigame "${name}". Create it in UI once, then run <b>!infected bindminigame &lt;index&gt;</b>.`);
+        this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create/load minigame "${name}". Ensure the preset exists in your server's Minigame Presets, or run <b>!infected importpreset</b> after setting the target folder in config.`);
         return;
       }
     }
-
-    await safeTry('ensure-template-copy', async () => {
-      if (!fs.existsSync(this.config['minigame-template'])) {
-        fs.copyFileSync(TEMPLATE_FILE, this.config['minigame-template']);
-      }
-    });
 
     this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Minigame ready: <b>${name}</b>.`);
     if (this.config['start-on-create']) await this.startRound();
     else this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Use !infected startround to begin.');
   }
 
-  async bindMinigameCmd(speaker, idx) {
+  async importPresetCmd(speaker) {
     if (!(await this.isAuthorizedByName(speaker))) {
       return this.omegga.whisper(speaker, 'You are not authorized to do that.');
     }
-    const list = await this.listMinigames();
-    if (!list.length) return this.omegga.whisper(speaker, 'No minigames found. Create one in the UI, then try again.');
-    const i = Number(idx);
-    if (!Number.isInteger(i)) return this.omegga.whisper(speaker, 'Usage: !infected bindminigame <index>');
-    const hit = list.find(m => m.index === i);
-    if (!hit) return this.omegga.whisper(speaker, `No minigame at index ${i}.`);
-    this.config['minigame-name'] = hit.name;
-    this.boundMinigame = hit;
-    this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Bound to minigame "${hit.name}" (index ${i}).`);
+    const ok = await this.importPresetByConfig();
+    if (ok) this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Preset imported and loaded.');
+    else this.omegga.broadcast('<b><color="ff6666">[Infected]</> Preset import failed. Check config (preset-target-dir) and that the .bp file exists.');
+  }
+
+  async bindMinigameCmd(speaker, modeOrIndex, maybeName) {
+    if (!(await this.isAuthorizedByName(speaker))) {
+      return this.omegga.whisper(speaker, 'You are not authorized to do that.');
+    }
+
+    const mode = (modeOrIndex || '').toLowerCase();
+
+    if (mode === 'name') {
+      const name = (maybeName || '').trim();
+      if (!name) return this.omegga.whisper(speaker, 'Usage: !infected bindminigame name <PresetName>');
+      this.config['minigame-name'] = name;
+      this.boundMinigame = await this.ensureExistsByName(name) || { index: -1, name };
+      return this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Bound by name to "${name}"${this.boundMinigame.index>=0?` (index ${this.boundMinigame.index})`:''}.`);
+    }
+
+    const i = Number(modeOrIndex);
+    if (Number.isInteger(i)) {
+      const list = await this.listMinigames();
+      const hit = list.find(m => m.index === i);
+      if (!hit) return this.omegga.whisper(speaker, `No minigame at index ${i}. Try "!infected bindminigame name Infected".`);
+      this.config['minigame-name'] = hit.name;
+      this.boundMinigame = hit;
+      return this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Bound to minigame "${hit.name}" (index ${i}).`);
+    }
+
+    this.omegga.whisper(speaker, 'Usage: !infected bindminigame <index>  — or —  !infected bindminigame name <PresetName>');
+  }
+
+  async debugListCmd(speaker) {
+    if (!(await this.isAuthorizedByName(speaker))) return;
+    const a = await this.execOut('Server.Minigames.List');
+    const b = await this.execOut('Minigame.List');
+    const c = await this.execOut('Chat.Command Minigame.List');
+    Omegga.log('infected: raw Server.Minigames.List >>>\n' + (a||'(empty)'));
+    Omegga.log('infected: raw Minigame.List >>>\n' + (b||'(empty)'));
+    Omegga.log('infected: raw Chat.Command Minigame.List >>>\n' + (c||'(empty)'));
+    this.omegga.whisper(speaker, 'Dumped raw list outputs to server console.');
   }
 
   async statusCmd(speaker) {
@@ -326,7 +397,6 @@ module.exports = class InfectedPlugin {
     await this.endRound(why);
   }
 
-  // ---- round logic ----
   async startRound() {
     if (this.roundActive) return;
     const pos = await this.omegga.getAllPlayerPositions?.() || [];
@@ -341,7 +411,6 @@ module.exports = class InfectedPlugin {
     this.firstInfectedId = null;
     this.roundEndAt = nowSec() + Math.max(30, Number(this.config['round-seconds']) || 300);
 
-    // Initialize player state
     this.playerState.clear();
     for (const p of pos) {
       const pl = this.omegga.getPlayer(p.player);
@@ -349,7 +418,7 @@ module.exports = class InfectedPlugin {
     }
 
     const players = [...this.playerState.keys()].map(id => ({ id, name: this.playerState.get(id).name }));
-    const idx = choice(players);
+    const idx = choiceIndex(players);
     const first = players[idx];
     if (!first) return this.endRound('no players');
 
@@ -373,7 +442,7 @@ module.exports = class InfectedPlugin {
       }
     }
 
-    await safeTry('save-stats', async () => this.store.set(STATS_KEY, this.stats));
+    try { await this.store.set(STATS_KEY, this.stats); } catch(e) { error('save-stats', e); }
 
     const survivorsLeft = [...this.playerState.keys()].filter(id => !this.infectedById.has(id)).length;
     const endMsg = reason === 'timer' ? 'Time\'s up! Survivors win.'
@@ -394,7 +463,6 @@ module.exports = class InfectedPlugin {
       return this.endRound('timer');
     }
 
-    // Detect deaths via getAllPlayerPositions when available
     const pos = await this.omegga.getAllPlayerPositions?.() || [];
     const byName = new Map(pos.map(p => [p.player, p]));
 
@@ -420,7 +488,6 @@ module.exports = class InfectedPlugin {
     if (survivorsLeft <= 0) await this.endRound('all infected');
   }
 
-  // ---- roles, loadouts, visuals ----
   async becomeInfected(playerRef, opts = {}) {
     const p = typeof playerRef === 'object' && playerRef.id ? playerRef : this.omegga.getPlayer(playerRef);
     if (!p) return;
@@ -470,47 +537,46 @@ module.exports = class InfectedPlugin {
     const p = this.omegga.getPlayer(name);
     if (!p) return;
     await this.becomeInfected({ id: p.id, name: p.name });
-    await safeTry('force-respawn', async () => {
+    try {
       if (typeof p.respawn === 'function') await p.respawn();
       else await this.omegga.exec?.(`Chat.Command Respawn "${p.name}"`);
-    });
+    } catch(e) { error('force-respawn', e); }
     await this.playSoundLocal(p, 'sound-spawn-infected');
   }
 
   async applySurvivorLoadout(p) {
-    await safeTry('clear-loadout', async () => this.omegga.exec?.(`Chat.Command ClearInv "${p.name}"`));
+    try { await this.omegga.exec?.(`Chat.Command ClearInv "${p.name}"`); } catch(e) { error('clear-loadout', e); }
     const weapon = (this.config['survivor-weapon'] || '').trim();
-    if (weapon) await safeTry('give-survivor-weapon', async () => this.omegga.exec?.(`Chat.Command Give "${p.name}" "${weapon}"`));
+    if (weapon) try { await this.omegga.exec?.(`Chat.Command Give "${p.name}" "${weapon}"`); } catch(e) { error('give-survivor-weapon', e); }
   }
 
   async applyInfectedLoadout(p, isFirst) {
-    await safeTry('clear-loadout', async () => this.omegga.exec?.(`Chat.Command ClearInv "${p.name}"`));
+    try { await this.omegga.exec?.(`Chat.Command ClearInv "${p.name}"`); } catch(e) { error('clear-loadout', e); }
     const knife = (this.config['infected-knife'] || '').trim();
-    if (knife) await safeTry('give-knife', async () => this.omegga.exec?.(`Chat.Command Give "${p.name}" "${knife}"`));
-    await safeTry('limit-slot', async () => this.omegga.exec?.(`Chat.Command LimitSlots "${p.name}" 1`));
+    if (knife) try { await this.omegga.exec?.(`Chat.Command Give "${p.name}" "${knife}"`); } catch(e) { error('give-knife', e); }
+    try { await this.omegga.exec?.(`Chat.Command LimitSlots "${p.name}" 1`); } catch(e) { error('limit-slot', e); }
     if (isFirst && !this.firstBloodHappened) {
       const bonus = (this.config['bonus-weapon'] || '').trim();
-      if (bonus) await safeTry('give-bonus', async () => this.omegga.exec?.(`Chat.Command Give "${p.name}" "${bonus}"`));
+      if (bonus) try { await this.omegga.exec?.(`Chat.Command Give "${p.name}" "${bonus}"`); } catch(e) { error('give-bonus', e); }
     }
   }
 
   async applyTint(p, on) {
     if (!this.config['green-tint-enabled']) return;
     const amt = Math.max(0, Math.min(1, Number(this.config['green-tint-amount']) || 0.7));
-    await safeTry('tint', async () => {
+    try {
       const val = on ? amt : 0;
       await this.omegga.exec?.(`Chat.Command Tint "${p.name}" ${val} 0.8 0.8`);
-    });
+    } catch(e) { error('tint', e); }
   }
 
   async playSoundLocal(p, key) {
     if (!this.config['enable-sounds']) return;
     const sound = (this.config[key] || '').trim();
     if (!sound) return;
-    await safeTry('play-sound', async () => this.omegga.exec?.(`Chat.Command PlaySound "${p.name}" "${sound}"`));
+    try { await this.omegga.exec?.(`Chat.Command PlaySound "${p.name}" "${sound}"`); } catch(e) { error('play-sound', e); }
   }
 
-  // ---- stats ----
   updateBestTime(id, name, seconds) {
     if (!id) return;
     const rec = this.stats.players[id] || { name, survivorKills: 0, zombieKills: 0, bestSurvival: 0, totalSurvival: 0, roundsPlayed: 0 };
