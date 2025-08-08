@@ -1,19 +1,19 @@
 # Infected / Zombies (Omegga Plugin)
 
-An **Infected** (Zombies) round gamemode scaffold for Brickadia using **Omegga** (Node VM).  
-Focus: reliable flow + safe fallbacks + good logging.
+An **Infected** (Zombies) gamemode for Brickadia using **Omegga** (Node VM).  
+Reliable flow + safe fallbacks + good logging.
 
 > ⚠️ Some Brickadia builds expose different console/chat commands. This plugin **never hard fails** when a command is missing — it logs a warning and no-ops. Configure the placeholders in the plugin UI.
 
 ## Features
 
 - **Admin commands**
-  - `!infected createminigame` – best-effort minigame setup from a **blank template** you can replace later; optionally starts a round.
+  - `!infected createminigame` – automated minigame setup from a **blank template** you can replace.
   - `!infected status` – quick status readout.
   - `!infected startround` / `!infected endround` – manual control for testing.
 - **Core rules**
-  - One random player starts infected. First infected gets a **temporary bonus** until the first survivor death.
-  - If a **survivor dies**, they instantly become infected (and are respawned best‑effort).
+  - One random player starts infected. First infected gets a **temporary item** until the first survivor death.
+  - If a **survivor dies**, they instantly become infected (and are respawned).
   - **Infected respawn**; survivors do not (they convert instead).
   - Round ends when **all survivors are infected** or when the **timer** expires.
 - **Roles & loadouts**
