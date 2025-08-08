@@ -257,125 +257,59 @@ module.exports = class InfectedPlugin {
 }
 
   async importAndLoadPreset() {
-    this.resolvedPresetPath = locatePresetSource(this.config['preset-source']);
-    if (!this.resolvedPresetPath) {
-      error('No preset file found in /plugins/infected/data. Expected Infected.json (preferred) or infected.bp / Infected.bp');
-      return false;
-    }
-    log('using preset source:', this.resolvedPresetPath);
-
-    const name = this.getPresetName();
-    await this.multiCopyPreset(this.resolvedPresetPath, name);
-
-    let candidates = [];
-    try {
-      const listed = await this.listPresetNames();
-      if (listed && listed.length) {
-        log('Server lists presets:', listed.join(', '));
-        const match = listed.find(n => n.toLowerCase() === name.toLowerCase()) || listed.find(n => n.toLowerCase() === 'infected') || listed[0];
-        if (match) candidates.push(match);
-      }
-    } catch (e) {
-      warn('ListPresets not available or failed', e);
-    }
-
-    candidates.push(name, name.toLowerCase(), name[0].toUpperCase()+name.slice(1), 'Infected', 'infected');
-    candidates = Array.from(new Set(candidates));
-
-    for (const n of candidates) {
-      const out = await this.execOut(`Server.Minigames.LoadPreset "${n}"`);
-      if (looksLikeError(out)) warn('LoadPreset returned:', out);
-      await sleep(400);
-      const hit = await this.ensureExistsByName(n);
-      if (hit) {
-        this.boundMinigame = hit;
-        log('loaded & bound preset:', hit.index, hit.name);
-        return true;
-      }
-    }
-    warn('preset load verification failed for names:', candidates.join(', '));
+  this.resolvedPresetPath = locatePresetSource(this.config['preset-source']);
+  if (!this.resolvedPresetPath) {
+    error('No preset file found in /plugins/infected/data. Expected Infected.json (preferred) or infected.bp / Infected.bp');
     return false;
   }
+  log('using preset source:', this.resolvedPresetPath);
 
-  // lifecycle
-  async init() {
-    log('initializing plugin...');
-    await this.ensureBoundMinigame();
+  const name = this.getPresetName();
+  await this.multiCopyPreset(this.resolvedPresetPath, name);
 
-    this.omegga.on('chatcmd:infected', (speaker, ...args) => this.onCommand(speaker, args));
+  // give the game a moment to index new presets
+  await sleep(1200);
 
-    log('initialized.');
-    return { registeredCommands: ['infected'] };
-  }
+  // Try to read rulesetName from the preset file for extra candidates
+  let rulesetName = null;
+  try {
+    const txt = fs.readFileSync(this.resolvedPresetPath, 'utf-8');
+    const j = JSON.parse(txt);
+    rulesetName = j?.data?.rulesetSettings?.rulesetName || null;
+  } catch {}
 
-  async stop() {
-    log('stopped.');
-  }
-
-  // join -> mid-round infect (stub; full logic omitted here for brevity)
-  async onJoin(player) {}
-
-  // commands
-  async onCommand(speaker, args) {
-    const sub = (args[0] || '').toLowerCase();
-    if (!sub) return this.help(speaker);
-
-    if (sub === 'status') return this.statusCmd(speaker);
-    if (sub === 'createminigame') return this.createMinigameCmd(speaker);
-    if (sub === 'startround') return this.startRoundCmd(speaker);
-    if (sub === 'endround') return this.endRoundCmd(speaker);
-
-    return this.help(speaker);
-  }
-
-  async help(speaker) {
-    this.omegga.whisper(speaker, 'Infected commands:');
-    this.omegga.whisper(speaker, '!infected createminigame  — setup/bind (admin)');
-    this.omegga.whisper(speaker, '!infected startround / endround (admin)');
-    this.omegga.whisper(speaker, '!infected status');
-  }
-
-  async createMinigameCmd(speaker) {
-    const name = this.getPresetName();
-
-    // Existing?
-    const existing = await this.ensureExistsByName(name);
-    if (existing) {
-      this.boundMinigame = existing;
-      this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Using existing minigame "${name}" (index ${existing.index}).`);
-      return;
+  let candidates = [];
+  try {
+    const listed = await this.listPresetNames();
+    if (listed && listed.length) {
+      log('Server lists presets:', listed.join(', '));
+      const match = listed.find(n => n.toLowerCase() === name.toLowerCase())
+        || (rulesetName && listed.find(n => n.toLowerCase() === String(rulesetName).toLowerCase()))
+        || listed.find(n => /infected/i.test(n))
+        || listed[0];
+      if (match) candidates.push(match);
     }
+  } catch (e) {
+    warn('ListPresets not available or failed', e);
+  }
 
-    // Try import+load
-    let ok = await this.importAndLoadPreset();
+  // Always try these names as well
+  const basics = [name, name.toLowerCase(), name[0]?.toUpperCase() + name.slice(1), 'Infected', 'infected'];
+  if (rulesetName) basics.push(String(rulesetName), String(rulesetName).toLowerCase());
+  candidates.push(...basics);
+  candidates = Array.from(new Set(candidates.filter(Boolean)));
 
-    // Fallback creation
-    if (!ok) {
-      try {
-        const a = await this.execOut(`Minigame.Create "${name}"`);
-        if (looksLikeError(a)) throw new Error(a);
-        const hit = await this.ensureExistsByName(name);
-        if (hit) { this.boundMinigame = hit; ok = true; }
-      } catch (e) { error('Minigame.Create failed', e); }
+  for (const n of candidates) {
+    const out = await this.execOut(`Server.Minigames.LoadPreset "${n}"`);
+    if (looksLikeError(out)) warn('LoadPreset returned:', out);
+    await sleep(600);
+    const hit = await this.ensureExistsByName(n);
+    if (hit) {
+      this.boundMinigame = hit;
+      log('loaded & bound preset:', hit.index, hit.name);
+      return true;
     }
-
-    if (!ok) {
-      this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create/load "${name}". Check console logs for preset copy/list/load steps.`);
-      return;
-    }
-
-    this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Minigame ready: <b>${name}</b>.`);
   }
-
-  async statusCmd(speaker) {
-    const mg = this.boundMinigame ? `#${this.boundMinigame.index} "${this.boundMinigame.name}"` : 'none';
-    this.omegga.whisper(speaker, `<b><color="aaffaa">[Infected]</> Bound: ${mg}`);
-  }
-
-  async startRoundCmd(speaker) {
-    this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Round start (manual).');
-  }
-  async endRoundCmd(speaker) {
-    this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Round end (manual).');
-  }
+  warn('preset load verification failed for names:', candidates.join(', '));
+  return false;
 };
