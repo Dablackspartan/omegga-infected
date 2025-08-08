@@ -1,0 +1,837 @@
+{
+	"formatVersion": "1",
+	"presetVersion": "1",
+	"type": "Minigame",
+	"data":
+	{
+		"gameTypeDescriptor": "GM_Deathmatch",
+		"rulesetSettings":
+		{
+			"rulesetName": "Infected",
+			"rulesetDescription": "",
+			"rulesetColor":
+			{
+				"r": 5,
+				"g": 5,
+				"b": 37,
+				"a": 255
+			},
+			"rulesetType": "PersistentMinigame",
+			"rulesetEntryPolicy": "Public",
+			"relevantBricks": "All"
+		},
+		"gamemodeSettings":
+		{
+			"roundTime": 300,
+			"roundRestartDelay": 5,
+			"bShowPointsInHud": true,
+			"bShowLivesInHud": true,
+			"pointsRequiredToWin": 0,
+			"timeUpWinPolicy": "SpecifiedTeamWins",
+			"lastManStandingPolicy": "AutomaticWin",
+			"nameOfSpecificTeam": "Survivor",
+			"bShowScoreColumn": true,
+			"bShowKillsColumn": true,
+			"bShowDeathsColumn": true,
+			"autoSortMode": "Off",
+			"teamSwitchPolicy": "NotAllowed",
+			"extraLives": 0,
+			"bAutoBalance": true
+		},
+		"unaffiliatedTeamSettings":
+		{
+			"teamName": "[Unassigned]",
+			"teamColor":
+			{
+				"r": 255,
+				"g": 255,
+				"b": 255,
+				"a": 255
+			},
+			"playerRespawnTime": 1,
+			"teamSpawnMode": "UseTeamColoredSpawnBricks",
+			"teamHealthMultiplier": 1,
+			"teamSpeedMultiplier": 1,
+			"teamJumpHeightMultiplier": 1,
+			"teamGrabForceMultiplier": 1,
+			"bTeamCollision": true,
+			"bTeamCanStack": false,
+			"controlModeOverride": "UserChoice",
+			"bEnableCameraBlockedEffects": true,
+			"teamAllies": "",
+			"bFriendlyDamage": false,
+			"bSelfDamageMode": true,
+			"bPhysicsDamageMode": true,
+			"bWeaponDamageMode": true,
+			"bEnvironmentDamageMode": true,
+			"waterDamagePerSecond": 0,
+			"respawnInvincibilityTime": 1,
+			"respawnSelfDestructPreventionTime": 1,
+			"maxItemSlots": 10,
+			"startingItem0":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"startingItem1":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"startingItem2":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"startingItem3":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"startingItem4":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"startingItem5":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"startingItem6":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"startingItem7":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"startingItem8":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"startingItem9":
+			{
+				"type": "Nothing",
+				"brickTypeIfBrick":
+				{
+					"brickAsset": "None",
+					"proceduralSize":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					}
+				},
+				"entityTypeIfEntity": "None",
+				"itemTypeIfItem": "None"
+			},
+			"specialBrickUsePolicy": "TeamColoredOrUnaffiliated",
+			"bCanReachGoalPoints": true,
+			"bCanUseCheckPoints": true,
+			"bRememberCheckPointBetweenJoins": true,
+			"teamNameDistance": 60000,
+			"enemyNameDistanceMultiplier": 1,
+			"bEnableTeamHealthRegeneration": false,
+			"teamHealthRegenStartTime": 3,
+			"teamHealthRegenPerSecond": 10,
+			"playersSpectatorsCanView": "OwnTeam",
+			"bForceSpectatorMode": false,
+			"bAllowSpectatorFreeCamera": true,
+			"spectatorChat": "ToAll",
+			"bLimitChatRange": false,
+			"chatRange": 128,
+			"bDeathNotifications": true,
+			"visibility": "VisibleToAll",
+			"fakeTeamWhenHidden": "[Unassigned]",
+			"bAllowBackgroundMusic": true,
+			"teamMusic": "None",
+			"teamMusicVolumeMultiplier": 1,
+			"characterBaseRotationOverride": "NotOverridden",
+			"pointsForKilling": 1,
+			"pointsForDying": 0,
+			"pointsForSelfDestruct": 0,
+			"pointsForDealingDamage": 0,
+			"pointsForTakingDamage": 0,
+			"playerLives": 0,
+			"teamLives": 0,
+			"teamWeight": 1,
+			"bLimitTeamCapacity": false,
+			"teamCapacity": 8,
+			"teamToMoveDeadTo": "",
+			"p_BR.Permission.Building": false,
+			"p_BR.Permission.Building.Applicator": false,
+			"p_BR.Permission.Building.Applicator.EditBricks": true,
+			"p_BR.Permission.Building.Applicator.EditEntities": true,
+			"p_BR.Permission.Building.Connector": false,
+			"p_BR.Permission.Building.Connector.EditWires": true,
+			"p_BR.Permission.Building.Hammer": false,
+			"p_BR.Permission.Building.Hammer.DeleteBricks": true,
+			"p_BR.Permission.Building.Hammer.DeleteEntities": true,
+			"p_BR.Permission.Building.IgnoreTrust": false,
+			"p_BR.Permission.Building.Manipulator": false,
+			"p_BR.Permission.Building.Painter": false,
+			"p_BR.Permission.Building.Painter.PaintBricks": true,
+			"p_BR.Permission.Building.Painter.PaintBricks.Fill": true,
+			"p_BR.Permission.Building.Placer": false,
+			"p_BR.Permission.Building.Placer.BuildOnOthersGridsWithoutTrust": false,
+			"p_BR.Permission.Building.Placer.BuildOutsideBuildZones": true,
+			"p_BR.Permission.Building.Placer.DeleteBricks": true,
+			"p_BR.Permission.Building.Placer.DeleteEntities": true,
+			"p_BR.Permission.Building.Placer.FollowMode": true,
+			"p_BR.Permission.Building.Placer.PickColors": true,
+			"p_BR.Permission.Building.Placer.PickObjects": true,
+			"p_BR.Permission.Building.Placer.PlaceBricks": true,
+			"p_BR.Permission.Building.Placer.PlaceEntities": true,
+			"p_BR.Permission.Building.Placer.PlaceFloating": true,
+			"p_BR.Permission.Building.Placer.PlaceLocked": true,
+			"p_BR.Permission.Building.Placer.PrecisionMode": true,
+			"p_BR.Permission.Building.Placer.ResizePlace": true,
+			"p_BR.Permission.Building.Placer.ResizePlace.SwitchAxis": true,
+			"p_BR.Permission.Building.Resizer": false,
+			"p_BR.Permission.Building.Selector": false,
+			"p_BR.Permission.Building.Selector.Split": true,
+			"p_BR.Permission.Building.ViewHiddenBricks": false,
+			"p_BR.Permission.Flashlight": true,
+			"p_BR.Permission.Fly": false,
+			"p_BR.Permission.Fly.Ghost": false,
+			"p_BR.Permission.FreezeCamera": false,
+			"p_BR.Permission.GrabObjects": true,
+			"p_BR.Permission.SelfDestruct": true,
+			"p_BR.Permission.SpawnItems": false,
+			"p_BR.Permission.Sprint": true
+		},
+		"customTeamSettings": [
+			{
+				"teamName": "Survivor",
+				"teamColor":
+				{
+					"r": 9,
+					"g": 18,
+					"b": 108,
+					"a": 255
+				},
+				"playerRespawnTime": 1,
+				"teamSpawnMode": "UseTeamColoredSpawnBricks",
+				"teamHealthMultiplier": 1.5,
+				"teamSpeedMultiplier": 1,
+				"teamJumpHeightMultiplier": 1,
+				"teamGrabForceMultiplier": 1,
+				"bTeamCollision": true,
+				"bTeamCanStack": false,
+				"controlModeOverride": "UserChoice",
+				"bEnableCameraBlockedEffects": true,
+				"teamAllies": "",
+				"bFriendlyDamage": true,
+				"bSelfDamageMode": true,
+				"bPhysicsDamageMode": true,
+				"bWeaponDamageMode": true,
+				"bEnvironmentDamageMode": true,
+				"waterDamagePerSecond": 0,
+				"respawnInvincibilityTime": 1,
+				"respawnSelfDestructPreventionTime": 1,
+				"maxItemSlots": 10,
+				"startingItem0":
+				{
+					"type": "Item",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "/Script/Engine.BlueprintGeneratedClass'/Game/Weapons/Historical/BoxPistol/Weapon_BoxPistol.Weapon_BoxPistol_C'"
+				},
+				"startingItem1":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem2":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem3":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem4":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem5":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem6":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem7":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem8":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem9":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"specialBrickUsePolicy": "TeamColoredOrUnaffiliated",
+				"bCanReachGoalPoints": true,
+				"bCanUseCheckPoints": true,
+				"bRememberCheckPointBetweenJoins": true,
+				"teamNameDistance": 60000,
+				"enemyNameDistanceMultiplier": 1,
+				"bEnableTeamHealthRegeneration": false,
+				"teamHealthRegenStartTime": 3,
+				"teamHealthRegenPerSecond": 10,
+				"playersSpectatorsCanView": "OwnTeam",
+				"bForceSpectatorMode": false,
+				"bAllowSpectatorFreeCamera": true,
+				"spectatorChat": "ToAll",
+				"bLimitChatRange": false,
+				"chatRange": 128,
+				"bDeathNotifications": true,
+				"visibility": "VisibleToAll",
+				"fakeTeamWhenHidden": "[Unassigned]",
+				"bAllowBackgroundMusic": true,
+				"teamMusic": "None",
+				"teamMusicVolumeMultiplier": 1,
+				"characterBaseRotationOverride": "NotOverridden",
+				"pointsForKilling": 1,
+				"pointsForDying": 0,
+				"pointsForSelfDestruct": 0,
+				"pointsForDealingDamage": 0,
+				"pointsForTakingDamage": 0,
+				"playerLives": 1,
+				"teamLives": 0,
+				"teamWeight": 1,
+				"bLimitTeamCapacity": false,
+				"teamCapacity": 8,
+				"teamToMoveDeadTo": "Infected",
+				"p_BR.Permission.Building": false,
+				"p_BR.Permission.Building.Applicator": false,
+				"p_BR.Permission.Building.Applicator.EditBricks": false,
+				"p_BR.Permission.Building.Applicator.EditEntities": false,
+				"p_BR.Permission.Building.Connector": false,
+				"p_BR.Permission.Building.Connector.EditWires": false,
+				"p_BR.Permission.Building.Hammer": false,
+				"p_BR.Permission.Building.Hammer.DeleteBricks": false,
+				"p_BR.Permission.Building.Hammer.DeleteEntities": false,
+				"p_BR.Permission.Building.IgnoreTrust": false,
+				"p_BR.Permission.Building.Manipulator": false,
+				"p_BR.Permission.Building.Painter": false,
+				"p_BR.Permission.Building.Painter.PaintBricks": false,
+				"p_BR.Permission.Building.Painter.PaintBricks.Fill": false,
+				"p_BR.Permission.Building.Placer": false,
+				"p_BR.Permission.Building.Placer.BuildOnOthersGridsWithoutTrust": false,
+				"p_BR.Permission.Building.Placer.BuildOutsideBuildZones": false,
+				"p_BR.Permission.Building.Placer.DeleteBricks": false,
+				"p_BR.Permission.Building.Placer.DeleteEntities": false,
+				"p_BR.Permission.Building.Placer.FollowMode": false,
+				"p_BR.Permission.Building.Placer.PickColors": false,
+				"p_BR.Permission.Building.Placer.PickObjects": false,
+				"p_BR.Permission.Building.Placer.PlaceBricks": false,
+				"p_BR.Permission.Building.Placer.PlaceEntities": false,
+				"p_BR.Permission.Building.Placer.PlaceFloating": false,
+				"p_BR.Permission.Building.Placer.PlaceLocked": false,
+				"p_BR.Permission.Building.Placer.PrecisionMode": false,
+				"p_BR.Permission.Building.Placer.ResizePlace": false,
+				"p_BR.Permission.Building.Placer.ResizePlace.SwitchAxis": false,
+				"p_BR.Permission.Building.Resizer": false,
+				"p_BR.Permission.Building.Selector": false,
+				"p_BR.Permission.Building.Selector.Split": false,
+				"p_BR.Permission.Building.ViewHiddenBricks": false,
+				"p_BR.Permission.Flashlight": true,
+				"p_BR.Permission.Fly": false,
+				"p_BR.Permission.Fly.Ghost": false,
+				"p_BR.Permission.FreezeCamera": false,
+				"p_BR.Permission.GrabObjects": true,
+				"p_BR.Permission.SelfDestruct": true,
+				"p_BR.Permission.SpawnItems": false,
+				"p_BR.Permission.Sprint": true
+			},
+			{
+				"teamName": "Infected",
+				"teamColor":
+				{
+					"r": 7,
+					"g": 96,
+					"b": 4,
+					"a": 255
+				},
+				"playerRespawnTime": 1,
+				"teamSpawnMode": "UseTeamColoredSpawnBricks",
+				"teamHealthMultiplier": 0.75,
+				"teamSpeedMultiplier": 1.5,
+				"teamJumpHeightMultiplier": 1.25,
+				"teamGrabForceMultiplier": 1,
+				"bTeamCollision": true,
+				"bTeamCanStack": false,
+				"controlModeOverride": "UserChoice",
+				"bEnableCameraBlockedEffects": true,
+				"teamAllies": "",
+				"bFriendlyDamage": false,
+				"bSelfDamageMode": true,
+				"bPhysicsDamageMode": true,
+				"bWeaponDamageMode": true,
+				"bEnvironmentDamageMode": true,
+				"waterDamagePerSecond": 0,
+				"respawnInvincibilityTime": 1,
+				"respawnSelfDestructPreventionTime": 1,
+				"maxItemSlots": 1,
+				"startingItem0":
+				{
+					"type": "Item",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "/Script/Engine.BlueprintGeneratedClass'/Game/Weapons/TacticalSMG/Weapon_TacticalSMG.Weapon_TacticalSMG_C'"
+				},
+				"startingItem1":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem2":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem3":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem4":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem5":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem6":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem7":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem8":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"startingItem9":
+				{
+					"type": "Nothing",
+					"brickTypeIfBrick":
+					{
+						"brickAsset": "None",
+						"proceduralSize":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					"entityTypeIfEntity": "None",
+					"itemTypeIfItem": "None"
+				},
+				"specialBrickUsePolicy": "TeamColoredOrUnaffiliated",
+				"bCanReachGoalPoints": true,
+				"bCanUseCheckPoints": true,
+				"bRememberCheckPointBetweenJoins": true,
+				"teamNameDistance": 60000,
+				"enemyNameDistanceMultiplier": 1,
+				"bEnableTeamHealthRegeneration": true,
+				"teamHealthRegenStartTime": 3,
+				"teamHealthRegenPerSecond": 10,
+				"playersSpectatorsCanView": "OwnTeam",
+				"bForceSpectatorMode": false,
+				"bAllowSpectatorFreeCamera": true,
+				"spectatorChat": "ToAll",
+				"bLimitChatRange": false,
+				"chatRange": 128,
+				"bDeathNotifications": false,
+				"visibility": "VisibleToAll",
+				"fakeTeamWhenHidden": "[Unassigned]",
+				"bAllowBackgroundMusic": true,
+				"teamMusic": "None",
+				"teamMusicVolumeMultiplier": 1,
+				"characterBaseRotationOverride": "NotOverridden",
+				"pointsForKilling": 1,
+				"pointsForDying": 0,
+				"pointsForSelfDestruct": 0,
+				"pointsForDealingDamage": 0,
+				"pointsForTakingDamage": 0,
+				"playerLives": 0,
+				"teamLives": 0,
+				"teamWeight": 1,
+				"bLimitTeamCapacity": false,
+				"teamCapacity": 8,
+				"teamToMoveDeadTo": "",
+				"p_BR.Permission.Building": false,
+				"p_BR.Permission.Building.Applicator": false,
+				"p_BR.Permission.Building.Applicator.EditBricks": false,
+				"p_BR.Permission.Building.Applicator.EditEntities": false,
+				"p_BR.Permission.Building.Connector": false,
+				"p_BR.Permission.Building.Connector.EditWires": false,
+				"p_BR.Permission.Building.Hammer": false,
+				"p_BR.Permission.Building.Hammer.DeleteBricks": false,
+				"p_BR.Permission.Building.Hammer.DeleteEntities": false,
+				"p_BR.Permission.Building.IgnoreTrust": false,
+				"p_BR.Permission.Building.Manipulator": false,
+				"p_BR.Permission.Building.Painter": false,
+				"p_BR.Permission.Building.Painter.PaintBricks": false,
+				"p_BR.Permission.Building.Painter.PaintBricks.Fill": false,
+				"p_BR.Permission.Building.Placer": false,
+				"p_BR.Permission.Building.Placer.BuildOnOthersGridsWithoutTrust": false,
+				"p_BR.Permission.Building.Placer.BuildOutsideBuildZones": false,
+				"p_BR.Permission.Building.Placer.DeleteBricks": false,
+				"p_BR.Permission.Building.Placer.DeleteEntities": false,
+				"p_BR.Permission.Building.Placer.FollowMode": false,
+				"p_BR.Permission.Building.Placer.PickColors": false,
+				"p_BR.Permission.Building.Placer.PickObjects": false,
+				"p_BR.Permission.Building.Placer.PlaceBricks": false,
+				"p_BR.Permission.Building.Placer.PlaceEntities": false,
+				"p_BR.Permission.Building.Placer.PlaceFloating": false,
+				"p_BR.Permission.Building.Placer.PlaceLocked": false,
+				"p_BR.Permission.Building.Placer.PrecisionMode": false,
+				"p_BR.Permission.Building.Placer.ResizePlace": false,
+				"p_BR.Permission.Building.Placer.ResizePlace.SwitchAxis": false,
+				"p_BR.Permission.Building.Resizer": false,
+				"p_BR.Permission.Building.Selector": false,
+				"p_BR.Permission.Building.Selector.Split": false,
+				"p_BR.Permission.Building.ViewHiddenBricks": false,
+				"p_BR.Permission.Flashlight": true,
+				"p_BR.Permission.Fly": false,
+				"p_BR.Permission.Fly.Ghost": false,
+				"p_BR.Permission.FreezeCamera": false,
+				"p_BR.Permission.GrabObjects": true,
+				"p_BR.Permission.SelfDestruct": true,
+				"p_BR.Permission.SpawnItems": false,
+				"p_BR.Permission.Sprint": true
+			}
+		]
+	}
+}
