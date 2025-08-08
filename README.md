@@ -1,13 +1,8 @@
 
-# infected (JSON preset version)
+# Infected / Zombies (Omegga Plugin)
 
-This variant reads a JSON minigame template from `infected/data/Infected.json`,
-copies it into Brickadia's `Saved/Presets/Minigames/` as `<Name>.bp`, then runs
-`Server.Minigames.LoadPreset "<Name>"` to create the minigame.
+This copy integrates JSON-based minigame creation:
+- Configure `minigame-template` (default: `data/Infected.json`).
+- Run `!infected createminigame` to write the preset and load it via `Server.Minigames.LoadPreset "<Name>"`.
 
-**Command**
-- `!infected createminigame`
-
-**Config**
-- `minigame-template`: relative path to the JSON template (default: `data/Infected.json`)
-- `minigame-name`: name for the minigame/preset (default: `Infected`)
+Commands: `!infected createminigame`, `!infected status`, `!infected startround`, `!infected endround`.

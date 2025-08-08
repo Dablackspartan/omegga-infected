@@ -1,123 +1,107 @@
 {
   "name": "Infected / Zombies (Omegga)",
-  "description": "Infected gamemode with auto preset import (case-insensitive), multi-dir copy, auto-bind, mid-join -> infected, tint, optional sounds, and persistent stats. Logs go to raw console.",
-  "author": "chatgpt-assistant",
+  "description": "Infected round gamemode scaffold with JSON-based minigame creation.",
+  "author": "Dablackspartan + patch",
   "config": {
     "authorized-users": {
-      "description": "Admins allowed to run admin-only commands",
-      "type": "players",
-      "default": []
-    },
-    "minigame-name": {
-      "description": "Preset/minigame name (blank = derive from preset file)",
-      "type": "string",
-      "default": ""
-    },
-    "preset-source": {
-      "description": "Preset file in /data (blank = auto-detect infected.bp / Infected.bp)",
-      "type": "string",
-      "default": ""
+      "description": "Admins allowed to use admin-only commands.",
+      "default": [],
+      "type": "array"
     },
     "round-seconds": {
-      "description": "Round length (seconds)",
-      "type": "number",
-      "default": 300
+      "description": "Round duration in seconds.",
+      "default": 300,
+      "type": "number"
     },
     "survivor-weapon": {
-      "description": "Survivor weapon (blank = none)",
-      "type": "string",
-      "default": ""
+      "description": "Item name for survivor firearm.",
+      "default": "",
+      "type": "string"
     },
     "infected-knife": {
-      "description": "Infected melee (blank = none)",
-      "type": "string",
-      "default": ""
+      "description": "Item name for infected knife.",
+      "default": "",
+      "type": "string"
     },
     "bonus-weapon": {
-      "description": "First infected bonus until first blood (blank = none)",
-      "type": "string",
-      "default": ""
+      "description": "Item name for first-infected temporary bonus.",
+      "default": "",
+      "type": "string"
     },
     "team-color-enabled": {
-      "description": "Green-tint zombies",
-      "type": "boolean",
-      "default": true
+      "description": "Enable infected team tint.",
+      "default": false,
+      "type": "boolean"
     },
     "green-tint-enabled": {
-      "description": "Apply tint",
-      "type": "boolean",
-      "default": true
+      "description": "Enable infected green tint.",
+      "default": false,
+      "type": "boolean"
     },
     "green-tint-amount": {
-      "description": "Tint intensity (0-1)",
-      "type": "number",
-      "default": 0.7
+      "description": "Amount of green tint (0..1).",
+      "default": 0.4,
+      "type": "number"
     },
     "enable-sounds": {
-      "description": "Play local sounds",
-      "type": "boolean",
-      "default": false
+      "description": "Toggle role-change sounds.",
+      "default": false,
+      "type": "boolean"
     },
-    "sound-become-zombie": {
-      "description": "Sound on infect",
-      "type": "string",
-      "default": ""
+    "sound-zombie": {
+      "description": "Sound asset ref for infected spawn/convert.",
+      "default": "",
+      "type": "string"
     },
-    "sound-spawn-survivor": {
-      "description": "Sound on survivor spawn",
-      "type": "string",
-      "default": ""
-    },
-    "sound-spawn-infected": {
-      "description": "Sound on infected spawn",
-      "type": "string",
-      "default": ""
-    },
-    "start-on-create": {
-      "description": "Auto-start after create",
-      "type": "boolean",
-      "default": true
+    "sound-survivor": {
+      "description": "Sound asset ref for survivor spawn.",
+      "default": "",
+      "type": "string"
     },
     "enable-kill-tracking": {
-      "description": "Track kills (best-effort)",
-      "type": "boolean",
-      "default": false
+      "description": "Enable basic kill tracking (experimental).",
+      "default": false,
+      "type": "boolean"
     },
-    "mid-join-assign-infected": {
-      "description": "Join mid-round -> infected",
-      "type": "boolean",
-      "default": true
+    "minigame-template": {
+      "description": "Path (relative to plugin folder) to the JSON minigame template.",
+      "default": "data/Infected.json",
+      "type": "string"
+    },
+    "minigame-name": {
+      "description": "Name to give the minigame/preset (overrides rulesetName inside JSON).",
+      "default": "Infected",
+      "type": "string"
+    },
+    "start-on-create": {
+      "description": "Auto-start after !infected createminigame.",
+      "default": false,
+      "type": "boolean"
     }
   },
   "commands": [
     {
       "name": "!infected createminigame",
-      "description": "Setup/bind (admin).",
+      "description": "Create the minigame from JSON template",
       "example": "!infected createminigame",
       "args": []
     },
     {
+      "name": "!infected status",
+      "description": "Show quick status",
+      "example": "!infected status",
+      "args": []
+    },
+    {
       "name": "!infected startround",
-      "description": "Start round (admin).",
+      "description": "Start a round (admin)",
       "example": "!infected startround",
       "args": []
     },
     {
       "name": "!infected endround",
-      "description": "End round (admin).",
+      "description": "End current round (admin)",
       "example": "!infected endround",
-      "args": []
-    },
-    {
-      "name": "!infected status",
-      "description": "Show state.",
-      "example": "!infected status",
-      "args": []
-    },
-    {
-      "name": "!infected bindminigame <index|name N>",
-      "description": "Bind by index or name (admin).",
-      "example": "!infected bindminigame name Infected",
       "args": []
     }
   ]
