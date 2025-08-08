@@ -159,6 +159,18 @@ module.exports = class InfectedPlugin {
     return name;
   }
 
+  // >>> missing before: provide ensureBoundMinigame <<<
+  async ensureBoundMinigame() {
+    const name = this.getPresetName();
+    const hit = await this.ensureExistsByName(name);
+    if (hit) {
+      this.boundMinigame = hit;
+      log('bound to existing minigame:', hit.index, hit.name);
+      return true;
+    }
+    return false;
+  }
+
   // ---- detect the actual presets directory by saving a probe ----
   async detectMinigamePresetDir() {
     const probeName = `_infected_probe_${Date.now()}`;
@@ -205,13 +217,15 @@ module.exports = class InfectedPlugin {
     const presetDir = await this.detectMinigamePresetDir();
     try { fs.mkdirSync(presetDir, { recursive: true }); } catch {}
 
-    // Copy as both Infected.bp and infected.bp to dodge case issues
-    const targets = [
-      path.join(presetDir, `${name}.bp`),
-      path.join(presetDir, `${name.toLowerCase()}.bp`),
-      path.join(presetDir, `${name[0].toUpperCase()}${name.slice(1)}.bp`),
-    ];
-    for (const t of targets) {
+    // Copy as both name.bp and common case variants to dodge case issues
+    const variants = Array.from(new Set([
+      `${name}.bp`,
+      `${name.toLowerCase()}.bp`,
+      `${name[0].toUpperCase()}${name.slice(1)}.bp`,
+      `Infected.bp`, `infected.bp`
+    ]));
+    for (const file of variants) {
+      const t = path.join(presetDir, file);
       try { fs.copyFileSync(src, t); log('copied preset to', t); } catch (e) { warn('copy failed', t, e); }
     }
 
@@ -437,6 +451,17 @@ module.exports = class InfectedPlugin {
       `Timer: ${this.roundActive ? secsLeft + 's' : 'n/a'}`
     ];
     for (const line of lines) this.omegga.whisper(speaker, line);
+  }
+
+  // >>> missing before: provide wrappers used by onCommand <<<
+  async startRoundCmd(speaker) {
+    if (!(await this.isAuthorizedByName(speaker))) return this.omegga.whisper(speaker, 'Not authorized.');
+    await this.startRound();
+  }
+
+  async endRoundCmd(speaker, why = 'forced') {
+    if (!(await this.isAuthorizedByName(speaker))) return this.omegga.whisper(speaker, 'Not authorized.');
+    await this.endRound(why);
   }
 
   // ---- round logic ----
