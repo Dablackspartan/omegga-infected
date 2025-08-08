@@ -1,6 +1,8 @@
 {
-  "formatVersion": 1,
-  "omeggaVersion": ">=0.1.32",
-  "emitConfig": "config.json",
-  "type": "safe"
+  "name": "Infected / Zombies (Omegga)",
+  "version": "0.7.2",
+  "description": "Infected (Zombies) round gamemode scaffold with robust minigame creation and preset loading.",
+  "author": "chatgpt-dev-assist",
+  "website": "https://github.com/Dablackspartan/omegga-infected",
+  "config": {}
 }
