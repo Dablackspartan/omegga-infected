@@ -5,14 +5,18 @@ const path = require('path');
 
 const PLUGIN_NAME = 'infected';
 const DATA_DIR = __dirname ? path.join(__dirname, 'data') : 'data';
-const DEFAULT_PRESET_SOURCE = path.join(DATA_DIR, 'infected.bp');
 const STATS_KEY = 'infected_stats_v1';
 
-function nowSec() { return Math.floor(Date.now() / 1000); }
-function log(...args) { try { Omegga?.log?.(PLUGIN_NAME + ':', ...args); } catch (e) {} }
-function warn(...args) { try { Omegga?.warn?.(PLUGIN_NAME + ':', ...args); } catch (e) {} }
-function error(...args) { try { Omegga?.error?.(PLUGIN_NAME + ':', ...args); } catch (e) {} }
+// ----- logging that also hits the raw server console -----
+function _clog(prefix, level, ...args) {
+  try { console[level || 'log'](`[${prefix}]`, ...args); } catch (_) {}
+  try { Omegga?.[level || 'log']?.(`${prefix}:`, ...args); } catch (_) {}
+}
+function log(...a){ _clog('Infected', 'log', ...a); }
+function warn(...a){ _clog('Infected', 'warn', ...a); }
+function error(...a){ _clog('Infected', 'error', ...a); }
 
+function nowSec() { return Math.floor(Date.now() / 1000); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function safeTry(tag, fn) {
@@ -28,8 +32,8 @@ function choiceIndex(arr) {
 function withDefaults(cfg) {
   const c = Object.assign({
     'authorized-users': [],
-    // If empty => derive preset/minigame name from preset-source basename (without .bp)
-    'minigame-name': '',
+    'minigame-name': '',               // blank -> derive from preset filename
+    'preset-source': '',               // blank -> auto-detect in /data (case-insensitive)
     'round-seconds': 300,
     'survivor-weapon': '',
     'infected-knife': '',
@@ -44,15 +48,8 @@ function withDefaults(cfg) {
     'start-on-create': true,
     'enable-kill-tracking': false,
     'team-color-enabled': true,
-    'mid-join-assign-infected': true,
-    // Always assume preset lives in plugin /data
-    'preset-source': 'data/infected.bp'
+    'mid-join-assign-infected': true
   }, cfg || {});
-
-  // Normalize relative preset source path to plugin dir
-  if (c['preset-source'] && !path.isAbsolute(c['preset-source'])) {
-    c['preset-source'] = path.join(DATA_DIR, path.basename(c['preset-source']));
-  }
   return c;
 }
 
@@ -70,7 +67,7 @@ function looksLikeError(out='') {
   return /unknown|invalid|error|usage|not found|failed/i.test(String(out));
 }
 
-// breadth-first search for a filename under a set of roots
+// BFS search for a filename under a set of roots
 function findFile(startDirs, targetBasename, maxDepth = 6) {
   const seen = new Set();
   const q = startDirs.map(d => ({d, depth:0}));
@@ -88,6 +85,34 @@ function findFile(startDirs, targetBasename, maxDepth = 6) {
       if (ent.isDirectory()) q.push({d: full, depth: depth+1});
     }
   }
+  return null;
+}
+
+// ----- locate preset source in plugin/data (case-insensitive) -----
+function locatePresetSource(explicitPath) {
+  if (explicitPath) {
+    const p = path.isAbsolute(explicitPath) ? explicitPath : path.join(DATA_DIR, path.basename(explicitPath));
+    if (fs.existsSync(p)) return p;
+    warn('configured preset-source not found:', p);
+  }
+
+  // Try common casings
+  const candidates = ['infected.bp', 'Infected.bp', 'INFECTED.bp'];
+  for (const c of candidates) {
+    const p = path.join(DATA_DIR, c);
+    if (fs.existsSync(p)) return p;
+  }
+
+  // Try any .bp in /data
+  try {
+    const files = fs.readdirSync(DATA_DIR).filter(f => f.toLowerCase().endsWith('.bp'));
+    if (files.length) {
+      const p = path.join(DATA_DIR, files[0]);
+      warn('using first .bp found in /data:', files[0]);
+      return p;
+    }
+  } catch (_) {}
+
   return null;
 }
 
@@ -109,11 +134,12 @@ module.exports = class InfectedPlugin {
     this.stats = { players: {} };
 
     this.boundMinigame = null;
+    this.resolvedPresetPath = null;
   }
 
   // ---- command exec & parsing ----
   async execOut(cmd) {
-    try { return await this.omegga.exec?.(cmd); } catch { return ''; }
+    try { return await this.omegga.exec?.(cmd); } catch (e) { error('execOut failed', cmd, e); return ''; }
   }
 
   parseMiniLine(line) {
@@ -150,19 +176,22 @@ module.exports = class InfectedPlugin {
   }
 
   getPresetName() {
+    // Prefer explicit config name
     let name = (this.config['minigame-name'] || '').trim();
-    if (!name) {
-      const src = (this.config['preset-source'] || DEFAULT_PRESET_SOURCE);
-      const base = path.basename(src, '.bp');
-      name = base || 'Infected';
-    }
-    return name;
+    if (name) return name;
+
+    // Otherwise derive from actual file we found
+    const src = this.resolvedPresetPath || locatePresetSource(this.config['preset-source']);
+    if (src) return path.basename(src, '.bp');
+
+    // Fallback
+    return 'Infected';
   }
 
-  // >>> missing before: provide ensureBoundMinigame <<<
+  // Provide ensureBoundMinigame
   async ensureBoundMinigame() {
     const name = this.getPresetName();
-    const hit = await this.ensureExistsByName(name);
+    const hit = await this.ensureExistsByName(name) || await this.ensureExistsByName(name.toLowerCase()) || await this.ensureExistsByName('infected') || await this.ensureExistsByName('Infected');
     if (hit) {
       this.boundMinigame = hit;
       log('bound to existing minigame:', hit.index, hit.name);
@@ -207,17 +236,20 @@ module.exports = class InfectedPlugin {
 
   // ---- import from plugin data and load by name (robust) ----
   async importAndLoadPreset() {
-    const name = this.getPresetName();
-    const src = (this.config['preset-source'] || DEFAULT_PRESET_SOURCE);
-    if (!fs.existsSync(src)) {
-      warn('preset source not found:', src);
+    // resolve source (case-insensitive)
+    this.resolvedPresetPath = locatePresetSource(this.config['preset-source']);
+    if (!this.resolvedPresetPath) {
+      error('No preset file found in /plugins/infected/data. Expected infected.bp or Infected.bp');
       return false;
     }
+    log('using preset source:', this.resolvedPresetPath);
+
+    const name = this.getPresetName();
 
     const presetDir = await this.detectMinigamePresetDir();
     try { fs.mkdirSync(presetDir, { recursive: true }); } catch {}
 
-    // Copy as both name.bp and common case variants to dodge case issues
+    // Copy as name.bp and a couple of case variants to dodge case issues
     const variants = Array.from(new Set([
       `${name}.bp`,
       `${name.toLowerCase()}.bp`,
@@ -226,7 +258,7 @@ module.exports = class InfectedPlugin {
     ]));
     for (const file of variants) {
       const t = path.join(presetDir, file);
-      try { fs.copyFileSync(src, t); log('copied preset to', t); } catch (e) { warn('copy failed', t, e); }
+      try { fs.copyFileSync(this.resolvedPresetPath, t); log('copied preset ->', t); } catch (e) { warn('copy failed', t, e); }
     }
 
     // Try several likely load names
@@ -433,9 +465,9 @@ module.exports = class InfectedPlugin {
     const a = await this.execOut('Server.Minigames.List');
     const b = await this.execOut('Minigame.List');
     const c = await this.execOut('Chat.Command Minigame.List');
-    Omegga.log('infected: raw Server.Minigames.List >>>\n' + (a||'(empty)'));
-    Omegga.log('infected: raw Minigame.List >>>\n' + (b||'(empty)'));
-    Omegga.log('infected: raw Chat.Command Minigame.List >>>\n' + (c||'(empty)'));
+    log('raw Server.Minigames.List >>>\n' + (a||'(empty)'));
+    log('raw Minigame.List >>>\n' + (b||'(empty)'));
+    log('raw Chat.Command Minigame.List >>>\n' + (c||'(empty)'));
     this.omegga.whisper(speaker, 'Dumped raw list outputs to server console.');
   }
 
@@ -453,7 +485,6 @@ module.exports = class InfectedPlugin {
     for (const line of lines) this.omegga.whisper(speaker, line);
   }
 
-  // >>> missing before: provide wrappers used by onCommand <<<
   async startRoundCmd(speaker) {
     if (!(await this.isAuthorizedByName(speaker))) return this.omegga.whisper(speaker, 'Not authorized.');
     await this.startRound();
