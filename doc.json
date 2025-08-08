@@ -1,12 +1,17 @@
 {
   "name": "Infected / Zombies (Omegga)",
-  "description": "Round-based Infected (Zombies) gamemode: auto minigame, roles & loadouts, team tint, round timer, optional sounds, persistent stats, and mid-round joiners auto-infected.",
+  "description": "Round-based Infected (Zombies) gamemode: auto-bind to an existing 'Infected' minigame when present, robust creation otherwise; roles & loadouts, team tint, round timer, optional sounds, persistent stats, and mid-round joiners auto-infected.",
   "author": "chatgpt-assistant",
   "config": {
     "authorized-users": {
       "description": "Admins allowed to run admin-only commands",
       "type": "players",
       "default": []
+    },
+    "minigame-name": {
+      "description": "Name of the minigame to create/bind to",
+      "type": "string",
+      "default": "Infected"
     },
     "round-seconds": {
       "description": "Round length in seconds",
@@ -92,13 +97,19 @@
   "commands": [
     {
       "name": "!infected createminigame",
-      "description": "Create/setup the Infected minigame from the blank template and (optionally) start a round (admin-only).",
+      "description": "Create/setup or bind to the configured minigame (admin-only).",
       "example": "!infected createminigame",
       "args": []
     },
     {
+      "name": "!infected bindminigame <index>",
+      "description": "Bind the plugin to an existing minigame index (admin-only).",
+      "example": "!infected bindminigame 0",
+      "args": []
+    },
+    {
       "name": "!infected status",
-      "description": "Show round state, counts, and timer.",
+      "description": "Show round state, counts, timer, and bound minigame.",
       "example": "!infected status",
       "args": []
     },

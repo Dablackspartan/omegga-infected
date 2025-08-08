@@ -22,12 +22,13 @@ async function safeTry(tag, fn) {
 
 function choice(arr) {
   if (!arr || !arr.length) return null;
-  return arr[Math.floor(Math.random() * arr.length)];
+  return Math.floor(Math.random() * arr.length);
 }
 
 function withDefaults(cfg) {
   const c = Object.assign({
     'authorized-users': [],
+    'minigame-name': 'Infected',
     'round-seconds': 300,
     'survivor-weapon': '',
     'infected-knife': '',
@@ -68,14 +69,56 @@ module.exports = class InfectedPlugin {
     this.playerState = new Map();
     this.stats = { players: {} };
 
-    this.playerByName = new Map();
+    this.boundMinigame = null; // {index, name} when detected
   }
 
+  // ---- helpers for exec and minigame discovery ----
+  async execOut(cmd) {
+    try { return await this.omegga.exec?.(cmd); } catch { return ''; }
+  }
+
+  looksLikeError(out='') {
+    return /unknown|invalid|error|usage|not found|failed/i.test(String(out));
+  }
+
+  async listMinigames() {
+    // Uses Server.Minigames.List (modern builds). Gracefully returns [] if unsupported.
+    const out = await this.execOut('Server.Minigames.List');
+    const lines = String(out || '').split(/\r?\n/);
+    const list = [];
+    for (const line of lines) {
+      // Try to parse formats like:
+      // "[0] Infected", "0: Infected", "0 - Infected"
+      const m = line.match(/(?:\[)?(\d+)(?:\])?[^A-Za-z0-9_-]*([A-Za-z0-9 ._\-\[\]\(\)]+)/);
+      if (m) list.push({ index: Number(m[1]), name: m[2].trim() });
+    }
+    return list;
+  }
+
+  async ensureExistsByName(targetName) {
+    const list = await this.listMinigames();
+    const hit = list.find(m => m.name.toLowerCase() === targetName.toLowerCase());
+    return hit || null;
+  }
+
+  async ensureBoundMinigame() {
+    const name = (this.config['minigame-name'] || 'Infected').trim() || 'Infected';
+    const hit = await this.ensureExistsByName(name);
+    if (hit) {
+      this.boundMinigame = hit;
+      log('bound to existing minigame:', hit.index, hit.name);
+      return true;
+    }
+    return false;
+  }
+
+  // ---- lifecycle ----
   async init() {
     log('initializing plugin...');
 
     await safeTry('ensure-template', async () => {
-      if (!fs.existsSync(TEMPLATE_FILE)) {
+      const exists = fs.existsSync(TEMPLATE_FILE);
+      if (!exists) {
         const blank = {
           name: "Infected_Minigrame_Template",
           description: "Replace this JSON with your own minigame preset if your server supports loading presets from file. This file is only a placeholder.",
@@ -94,6 +137,9 @@ module.exports = class InfectedPlugin {
       const s = await this.store.get(STATS_KEY);
       if (s && typeof s === 'object') this.stats = s;
     });
+
+    // Auto-bind if a minigame named "Infected" (or config name) already exists
+    await this.ensureBoundMinigame();
 
     // Commands
     this.omegga.on('chatcmd:infected', (speaker, ...args) => this.onCommand(speaker, args));
@@ -114,17 +160,15 @@ module.exports = class InfectedPlugin {
     log('stopped.');
   }
 
+  // ---- events ----
   async onJoin(player) {
     try {
       if (!this.roundActive) return;
       if (!this.config['mid-join-assign-infected']) return;
       if (!player || !player.id || !player.name) return;
 
-      // Skip if we already marked them infected this round
-      if (this.playerState.has(player.id) && this.infectedById.has(player.id)) return;
-
       // Track and convert shortly after join so they’re fully spawned
-      this.playerState.set(player.id, { name: player.name, isDead: false, becameInfectedAt: 0, survivalStartAt: 0 });
+      if (!this.playerState.has(player.id)) this.playerState.set(player.id, { name: player.name, isDead: false, becameInfectedAt: 0, survivalStartAt: 0 });
       setTimeout(() => {
         this.becomeInfected({ id: player.id, name: player.name }).catch(e => error('onJoin->becomeInfected', e));
         this.omegga.whisper(player.name, '<b><color="22ff22">[Infected]</> You joined mid-round and were added to the Infected.</b>');
@@ -134,12 +178,14 @@ module.exports = class InfectedPlugin {
     }
   }
 
+  // ---- commands ----
   async onCommand(speaker, args) {
     const sub = (args[0] || '').toLowerCase();
     if (!sub) return this.help(speaker);
 
     if (sub === 'status') return this.statusCmd(speaker);
     if (sub === 'createminigame') return this.createMinigameCmd(speaker);
+    if (sub === 'bindminigame') return this.bindMinigameCmd(speaker, args[1]);
 
     if (sub === 'startround') return this.startRoundCmd(speaker);
     if (sub === 'endround') return this.endRoundCmd(speaker, 'forced');
@@ -149,7 +195,8 @@ module.exports = class InfectedPlugin {
 
   async help(speaker) {
     this.omegga.whisper(speaker, 'Infected plugin commands:');
-    this.omegga.whisper(speaker, '!infected createminigame - create/setup minigame (admin only)');
+    this.omegga.whisper(speaker, '!infected createminigame - create/setup or bind to minigame (admin only)');
+    this.omegga.whisper(speaker, '!infected bindminigame <index> - bind to existing minigame (admin only)');
     this.omegga.whisper(speaker, '!infected status - show current state');
     this.omegga.whisper(speaker, '!infected startround - start a round (admin only)');
     this.omegga.whisper(speaker, '!infected endround - end current round (admin only)');
@@ -175,43 +222,54 @@ module.exports = class InfectedPlugin {
       return this.omegga.whisper(speaker, 'You are not authorized to do that.');
     }
 
-    const name = 'Infected';
+    const name = (this.config['minigame-name'] || 'Infected').trim() || 'Infected';
     const teams = ['Survivors', 'Infected'];
 
-    const attempts = [
-      async () => {
-        log('createMinigame: trying direct console commands...');
-        await this.omegga.exec?.(`Minigame.Create "${name}"`);
-        for (const t of teams) {
-          await this.omegga.exec?.(`Minigame.AddTeam "${name}" "${t}"`);
-        }
-      },
-      async () => {
-        if (typeof this.omegga.createMinigame === 'function') {
-          log('createMinigame: trying omegga.createMinigame API...');
-          await this.omegga.createMinigame?.({ name, teams });
-        } else {
-          throw new Error('createMinigame API not available');
-        }
-      },
-      async () => {
-        log('createMinigame: trying Chat.Command fallback...');
-        await this.omegga.exec?.(`Chat.Command Minigame.Create "${name}"`);
-        for (const t of teams) {
-          await this.omegga.exec?.(`Chat.Command Minigame.AddTeam "${name}" "${t}"`);
-        }
-      },
-    ];
+    // If it already exists, bind and move on
+    const existing = await this.ensureExistsByName(name);
+    if (existing) {
+      this.boundMinigame = existing;
+      this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Minigame "${name}" exists (index ${existing.index}). Bound to it.`);
+    } else {
+      // Try 3 creation paths, verify after each
+      const attempts = [
+        async () => {
+          log('createMinigame: trying direct console commands...');
+          const a = await this.execOut(`Minigame.Create "${name}"`);
+          const b = await this.execOut(`Minigame.AddTeam "${name}" "${teams[0]}"`);
+          const c = await this.execOut(`Minigame.AddTeam "${name}" "${teams[1]}"`);
+          if (this.looksLikeError(a+b+c)) throw new Error('Minigame.Create path failed');
+        },
+        async () => {
+          if (typeof this.omegga.createMinigame === 'function') {
+            log('createMinigame: trying omegga.createMinigame API...');
+            await this.omegga.createMinigame?.({ name, teams });
+          } else {
+            throw new Error('createMinigame API not available');
+          }
+        },
+        async () => {
+          log('createMinigame: trying Chat.Command fallback...');
+          const a = await this.execOut(`Chat.Command Minigame.Create "${name}"`);
+          const b = await this.execOut(`Chat.Command Minigame.AddTeam "${name}" "${teams[0]}"`);
+          const c = await this.execOut(`Chat.Command Minigame.AddTeam "${name}" "${teams[1]}"`);
+          if (this.looksLikeError(a+b+c)) throw new Error('Chat.Command path failed');
+        },
+      ];
 
-    let ok = false;
-    for (const attempt of attempts) {
-      try { await attempt(); ok = true; break; }
-      catch (e) { error('createMinigame attempt failed', e); }
-    }
+      let ok = false;
+      for (const attempt of attempts) {
+        try {
+          await attempt();
+          const hit = await this.ensureExistsByName(name);
+          if (hit) { this.boundMinigame = hit; ok = true; break; }
+        } catch (e) { error('createMinigame attempt failed', e); }
+      }
 
-    if (!ok) {
-      this.omegga.broadcast('<b><color="ff6666">[Infected]</> Failed to create minigame. Check console for errors.');
-      return;
+      if (!ok) {
+        this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create minigame "${name}". Create it in UI once, then run <b>!infected bindminigame &lt;index&gt;</b>.`);
+        return;
+      }
     }
 
     await safeTry('ensure-template-copy', async () => {
@@ -220,24 +278,35 @@ module.exports = class InfectedPlugin {
       }
     });
 
-    this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Minigame created (or already existed).');
+    this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Minigame ready: <b>${name}</b>.`);
+    if (this.config['start-on-create']) await this.startRound();
+    else this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Use !infected startround to begin.');
+  }
 
-    if (this.config['start-on-create']) {
-      await this.startRound();
-    } else {
-      this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Use !infected startround to begin.');
+  async bindMinigameCmd(speaker, idx) {
+    if (!(await this.isAuthorizedByName(speaker))) {
+      return this.omegga.whisper(speaker, 'You are not authorized to do that.');
     }
+    const list = await this.listMinigames();
+    if (!list.length) return this.omegga.whisper(speaker, 'No minigames found. Create one in the UI, then try again.');
+    const i = Number(idx);
+    if (!Number.isInteger(i)) return this.omegga.whisper(speaker, 'Usage: !infected bindminigame <index>');
+    const hit = list.find(m => m.index === i);
+    if (!hit) return this.omegga.whisper(speaker, `No minigame at index ${i}.`);
+    this.config['minigame-name'] = hit.name;
+    this.boundMinigame = hit;
+    this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Bound to minigame "${hit.name}" (index ${i}).`);
   }
 
   async statusCmd(speaker) {
     const secsLeft = Math.max(0, (this.roundEndAt || 0) - nowSec());
     const infectedCount = this.infectedById.size;
-    const players = await this.getAlivePlayerList();
-    const total = players.length;
+    const total = this.playerState.size;
+    const mg = this.boundMinigame ? `#${this.boundMinigame.index} "${this.boundMinigame.name}"` : 'none';
 
     const lines = [
-      `<b><color="aaffaa">[Infected]</> Round: ${this.roundActive ? 'ACTIVE' : 'idle'}`,
-      `Players: ${total} | Infected: ${infectedCount} | Survivors: ${Math.max(0, total - infectedCount)}`,
+      `<b><color="aaffaa">[Infected]</> Round: ${this.roundActive ? 'ACTIVE' : 'idle'} | Minigame: ${mg}`,
+      `Players tracked: ${total} | Infected: ${infectedCount} | Survivors: ${Math.max(0, total - infectedCount)}`,
       `Timer: ${this.roundActive ? secsLeft + 's remaining' : 'n/a'}`
     ];
     for (const line of lines) this.omegga.whisper(speaker, line);
@@ -257,10 +326,11 @@ module.exports = class InfectedPlugin {
     await this.endRound(why);
   }
 
+  // ---- round logic ----
   async startRound() {
     if (this.roundActive) return;
-    const players = await this.getAlivePlayerList();
-    if (!players || players.length < 2) {
+    const pos = await this.omegga.getAllPlayerPositions?.() || [];
+    if (pos.length < 2) {
       this.omegga.broadcast('<b><color="ffaaaa">[Infected]</> Need at least 2 players to start.');
       return;
     }
@@ -269,16 +339,21 @@ module.exports = class InfectedPlugin {
     this.firstBloodHappened = false;
     this.infectedById.clear();
     this.firstInfectedId = null;
-       this.roundEndAt = nowSec() + Math.max(30, Number(this.config['round-seconds']) || 300);
+    this.roundEndAt = nowSec() + Math.max(30, Number(this.config['round-seconds']) || 300);
 
-    for (const p of players) {
-      this.playerState.set(p.id, { name: p.name, isDead: false, becameInfectedAt: 0, survivalStartAt: nowSec() });
+    // Initialize player state
+    this.playerState.clear();
+    for (const p of pos) {
+      const pl = this.omegga.getPlayer(p.player);
+      if (pl?.id) this.playerState.set(pl.id, { name: pl.name || p.player, isDead: false, becameInfectedAt: 0, survivalStartAt: nowSec() });
     }
 
-    const first = choice(players);
+    const players = [...this.playerState.keys()].map(id => ({ id, name: this.playerState.get(id).name }));
+    const idx = choice(players);
+    const first = players[idx];
     if (!first) return this.endRound('no players');
-    await this.becomeInfected(first, { isFirst: true });
 
+    await this.becomeInfected(first, { isFirst: true });
     for (const p of players) {
       if (p.id !== first.id) await this.becomeSurvivor(p);
     }
@@ -319,23 +394,20 @@ module.exports = class InfectedPlugin {
       return this.endRound('timer');
     }
 
-    const pos = await safeTry('getAllPlayerPositions', async () => this.omegga.getAllPlayerPositions?.()) || [];
-    const byName = new Map();
-    for (const p of pos) byName.set(p.player, p);
-    this.playerByName = byName;
+    // Detect deaths via getAllPlayerPositions when available
+    const pos = await this.omegga.getAllPlayerPositions?.() || [];
+    const byName = new Map(pos.map(p => [p.player, p]));
 
     for (const [id, st] of this.playerState.entries()) {
       const name = st.name;
       const p = this.omegga.getPlayer(name);
       if (!p) continue;
-      let aliveDead = false;
-      try {
-        const plog = byName.get(name);
-        aliveDead = !!(plog && plog.isDead);
-      } catch (_) {}
 
-      const isInfected = this.infectedById.has(id);
-      if (!isInfected && aliveDead) {
+      const plog = byName.get(name);
+      const isDead = !!(plog && plog.isDead);
+
+      const infected = this.infectedById.has(id);
+      if (!infected && isDead) {
         if (!this.firstBloodHappened) {
           this.firstBloodHappened = true;
           await this.disableFirstBonus();
@@ -348,18 +420,7 @@ module.exports = class InfectedPlugin {
     if (survivorsLeft <= 0) await this.endRound('all infected');
   }
 
-  async getAlivePlayerList() {
-    const list = [];
-    const pos = await safeTry('getAllPlayerPositions', async () => this.omegga.getAllPlayerPositions?.()) || [];
-    for (const p of pos) {
-      try {
-        const pl = this.omegga.getPlayer(p.player);
-        if (pl) list.push({ id: pl.id, name: pl.name || p.player });
-      } catch (_) {}
-    }
-    return list;
-  }
-
+  // ---- roles, loadouts, visuals ----
   async becomeInfected(playerRef, opts = {}) {
     const p = typeof playerRef === 'object' && playerRef.id ? playerRef : this.omegga.getPlayer(playerRef);
     if (!p) return;
@@ -397,9 +458,10 @@ module.exports = class InfectedPlugin {
   async disableFirstBonus() {
     if (!this.firstInfectedId) return;
     try {
-      const p = [...(await this.getAlivePlayerList())].find(pl => pl.id === this.firstInfectedId);
-      if (!p) return;
-      await this.applyInfectedLoadout(p, false);
+      const id = this.firstInfectedId;
+      const st = this.playerState.get(id);
+      if (!st) return;
+      await this.applyInfectedLoadout({ id, name: st.name }, false);
       this.omegga.broadcast('<b><color="aaffaa">[Infected]</> First blood! Bonus weapon removed from the first infected.');
     } catch (e) { error('disableFirstBonus', e); }
   }
@@ -448,6 +510,7 @@ module.exports = class InfectedPlugin {
     await safeTry('play-sound', async () => this.omegga.exec?.(`Chat.Command PlaySound "${p.name}" "${sound}"`));
   }
 
+  // ---- stats ----
   updateBestTime(id, name, seconds) {
     if (!id) return;
     const rec = this.stats.players[id] || { name, survivorKills: 0, zombieKills: 0, bestSurvival: 0, totalSurvival: 0, roundsPlayed: 0 };
