@@ -180,7 +180,7 @@ module.exports = class InfectedPlugin {
       // Not all installs expose minigame creation helpers. Try a few options.
       // 1) If your Omegga has minigame APIs (recent versions claim support), try to use them.
       if (typeof this.omegga.createMinigame === 'function') {
-        await this.omegga.createMiniggame?.({ name: 'Infected', teams: ['Survivors', 'Infected'] });
+        await this.omegga.createMinigame?.({ name: 'Infected', teams: ['Survivors', 'Infected'] });
       } else {
         // 2) Fallback: try a console Chat.Command that your build might support (safe no-op if unknown).
         // NOTE: You may need to adjust these for your server build.
