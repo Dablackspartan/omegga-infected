@@ -42,6 +42,7 @@ function withDefaults(cfg) {
     'survivor-weapon': '',
     'infected-knife': '',
     'bonus-weapon': '',
+    'mid-join-assign-infected': true,
     'green-tint-enabled': true,
     'green-tint-amount': 0.7,
     'enable-sounds': false,
@@ -86,7 +87,9 @@ module.exports = class InfectedPlugin {
   // === Lifecycle ===
   async init() {
     log('initializing plugin...');
-
+    
+    // Mid-round join handling
+    this.omegga.on('join', (player) => this.onJoin(player));
     // Ensure obvious blank file for minigame mapping
     await safeTry('ensure-template', async () => {
       if (!fs.existsSync(TEMPLATE_FILE)) {
@@ -125,6 +128,26 @@ module.exports = class InfectedPlugin {
     return { registeredCommands: ['infected'] };
   }
 
+  async onJoin(player) {
+  try {
+    if (!this.roundActive) return;
+    if (!this.config['mid-join-assign-infected']) return;
+    if (!player || !player.id || !player.name) return;
+
+    // Skip if we already marked them infected this round
+    if (this.playerState.has(player.id) && this.infectedById.has(player.id)) return;
+
+    // Track and convert shortly after join so they’re fully spawned
+    this.playerState.set(player.id, { name: player.name, isDead: false, becameInfectedAt: 0, survivalStartAt: 0 });
+    setTimeout(() => {
+      this.becomeInfected({ id: player.id, name: player.name }).catch(e => Omegga.error('infected: onJoin->becomeInfected', e));
+      this.omegga.whisper(player.name, '<b><color="22ff22">[Infected]</> You joined mid-round and were added to the Infected.</b>');
+    }, 1000);
+  } catch (e) {
+    Omegga.error('infected: onJoin', e);
+  }
+}
+  
   async stop() {
     if (this.roundTimer) clearInterval(this.roundTimer);
     await safeTry('save-stats', async () => this.store.set(STATS_KEY, this.stats));
