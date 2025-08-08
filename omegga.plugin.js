@@ -255,9 +255,6 @@ module.exports = class InfectedPlugin {
   }
   return copies;
 }
-    }
-    return copies;
-  }
 
   async importAndLoadPreset() {
     this.resolvedPresetPath = locatePresetSource(this.config['preset-source']);
