@@ -1,6 +1,6 @@
 {
   "name": "Infected / Zombies (Omegga)",
-  "description": "Infected gamemode with auto preset import (case-insensitive), auto-bind, mid-join -> infected, tint, optional sounds, and persistent stats. Logs also go to raw server console.",
+  "description": "Infected gamemode with auto preset import (case-insensitive), multi-dir copy, auto-bind, mid-join -> infected, tint, optional sounds, and persistent stats. Logs go to raw console.",
   "author": "chatgpt-assistant",
   "config": {
     "authorized-users": {

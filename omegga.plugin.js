@@ -19,11 +19,6 @@ function error(...a){ _clog('Infected', 'error', ...a); }
 function nowSec() { return Math.floor(Date.now() / 1000); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function safeTry(tag, fn) {
-  try { return await fn(); }
-  catch (e) { error(`[${tag}]`, e && e.stack ? e.stack : e); }
-}
-
 function choiceIndex(arr) {
   if (!arr || !arr.length) return -1;
   return Math.floor(Math.random() * arr.length);
@@ -53,7 +48,7 @@ function withDefaults(cfg) {
   return c;
 }
 
-// ----- generic output helpers -----
+// ----- helpers -----
 function stripOut(s='') {
   return String(s)
     .replace(/\x1b\[[0-9;]*m/g, '')
@@ -88,22 +83,18 @@ function findFile(startDirs, targetBasename, maxDepth = 6) {
   return null;
 }
 
-// ----- locate preset source in plugin/data (case-insensitive) -----
+// locate preset source in plugin/data (case-insensitive)
 function locatePresetSource(explicitPath) {
   if (explicitPath) {
     const p = path.isAbsolute(explicitPath) ? explicitPath : path.join(DATA_DIR, path.basename(explicitPath));
     if (fs.existsSync(p)) return p;
     warn('configured preset-source not found:', p);
   }
-
-  // Try common casings
   const candidates = ['infected.bp', 'Infected.bp', 'INFECTED.bp'];
   for (const c of candidates) {
     const p = path.join(DATA_DIR, c);
     if (fs.existsSync(p)) return p;
   }
-
-  // Try any .bp in /data
   try {
     const files = fs.readdirSync(DATA_DIR).filter(f => f.toLowerCase().endsWith('.bp'));
     if (files.length) {
@@ -112,8 +103,28 @@ function locatePresetSource(explicitPath) {
       return p;
     }
   } catch (_) {}
-
   return null;
+}
+
+// candidate preset directories
+function candidatePresetDirs() {
+  const cwd = process.cwd();
+  const home = process.env.HOME || process.env.USERPROFILE;
+  const localapp = process.env.LOCALAPPDATA;
+
+  const dirs = [
+    path.join(cwd, 'Saved', 'Presets', 'Minigames'),
+    path.join(cwd, 'Brickadia', 'Saved', 'Presets', 'Minigames'),
+    '/home/container/Saved/Presets/Minigames',
+    '/home/container/Brickadia/Saved/Presets/Minigames',
+  ];
+
+  if (home) dirs.push(path.join(home, '.local', 'share', 'Brickadia', 'Saved', 'Presets', 'Minigames'));
+  if (localapp) dirs.push(path.join(localapp, 'Brickadia', 'Saved', 'Presets', 'Minigames'));
+
+  // de-dupe
+  const seen = new Set();
+  return dirs.filter(p => { const k = path.normalize(p); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
 module.exports = class InfectedPlugin {
@@ -137,7 +148,6 @@ module.exports = class InfectedPlugin {
     this.resolvedPresetPath = null;
   }
 
-  // ---- command exec & parsing ----
   async execOut(cmd) {
     try { return await this.omegga.exec?.(cmd); } catch (e) { error('execOut failed', cmd, e); return ''; }
   }
@@ -188,7 +198,6 @@ module.exports = class InfectedPlugin {
     return 'Infected';
   }
 
-  // Provide ensureBoundMinigame
   async ensureBoundMinigame() {
     const name = this.getPresetName();
     const hit = await this.ensureExistsByName(name) || await this.ensureExistsByName(name.toLowerCase()) || await this.ensureExistsByName('infected') || await this.ensureExistsByName('Infected');
@@ -200,41 +209,34 @@ module.exports = class InfectedPlugin {
     return false;
   }
 
-  // ---- detect the actual presets directory by saving a probe ----
-  async detectMinigamePresetDir() {
-    const probeName = `_infected_probe_${Date.now()}`;
-    const cmd = `Server.Minigames.SavePreset 0 "${probeName}"`;
-    const out = await this.execOut(cmd);
-    if (looksLikeError(out)) warn('SavePreset probe returned:', out);
-    await sleep(500);
-
-    // Search likely roots for the probe file
-    const roots = [
-      process.cwd(),
-      path.join(process.cwd(), 'Brickadia'),
-      '/home/container',
-      process.env.HOME,
-      process.env.USERPROFILE,
-      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Brickadia'),
-      process.env.HOME && path.join(process.env.HOME, '.local', 'share'),
-    ].filter(Boolean);
-
-    const found = findFile(roots, `${probeName}.bp`, 6);
-    if (!found) {
-      warn('probe preset not found; falling back to ./Saved/Presets/Minigames');
-      const fallback = path.join(process.cwd(), 'Saved', 'Presets', 'Minigames');
-      try { fs.mkdirSync(fallback, { recursive: true }); } catch {}
-      return fallback;
+  // List available preset names, best-effort
+  async listPresetNames() {
+    const out = await this.execOut('Server.Minigames.ListPresets');
+    if (!out) return [];
+    const s = stripOut(out);
+    const names = [];
+    for (const line of s.split(/\r?\n/)) {
+      const m = line.match(/^\s*[-\*]\s*["']?(.+?)["']?\s*$/) || line.match(/name\s*[:=]\s*["'](.+?)["']/i);
+      if (m) names.push(m[1].trim());
+      else if (line.trim() && !/Minigame|index|ruleset/i.test(line)) names.push(line.trim());
     }
-
-    // cleanup the probe
-    try { fs.unlinkSync(found); } catch {}
-    const dir = path.dirname(found);
-    log('detected Minigame Presets dir:', dir);
-    return dir;
+    return names;
   }
 
-  // ---- import from plugin data and load by name (robust) ----
+  // Copy preset to multiple candidate dirs
+  async multiCopyPreset(src, name) {
+    const dirs = candidatePresetDirs();
+    const copies = [];
+    for (const d of dirs) {
+      try { fs.mkdirSync(d, { recursive: true }); } catch {}
+      for (const file of Array.from(new Set([`${name}.bp`, `${name.toLowerCase()}.bp`, `${name[0].toUpperCase()}${name.slice(1)}.bp`, `Infected.bp`, `infected.bp`]))) {
+        const dest = path.join(d, file);
+        try { fs.copyFileSync(src, dest); copies.push(dest); log('copied preset ->', dest); } catch (e) { warn('copy failed', dest, e); }
+      }
+    }
+    return copies;
+  }
+
   async importAndLoadPreset() {
     // resolve source (case-insensitive)
     this.resolvedPresetPath = locatePresetSource(this.config['preset-source']);
@@ -246,23 +248,26 @@ module.exports = class InfectedPlugin {
 
     const name = this.getPresetName();
 
-    const presetDir = await this.detectMinigamePresetDir();
-    try { fs.mkdirSync(presetDir, { recursive: true }); } catch {}
+    // Copy to many candidate dirs
+    await this.multiCopyPreset(this.resolvedPresetPath, name);
 
-    // Copy as name.bp and a couple of case variants to dodge case issues
-    const variants = Array.from(new Set([
-      `${name}.bp`,
-      `${name.toLowerCase()}.bp`,
-      `${name[0].toUpperCase()}${name.slice(1)}.bp`,
-      `Infected.bp`, `infected.bp`
-    ]));
-    for (const file of variants) {
-      const t = path.join(presetDir, file);
-      try { fs.copyFileSync(this.resolvedPresetPath, t); log('copied preset ->', t); } catch (e) { warn('copy failed', t, e); }
+    // If the server can list presets, prefer the exact name it reports
+    let candidates = [];
+    try {
+      const listed = await this.listPresetNames();
+      if (listed && listed.length) {
+        log('Server lists presets:', listed.join(', '));
+        const match = listed.find(n => n.toLowerCase() === name.toLowerCase()) || listed.find(n => n.toLowerCase() === 'infected') || listed[0];
+        if (match) candidates.push(match);
+      }
+    } catch (e) {
+      warn('ListPresets not available or failed', e);
     }
 
-    // Try several likely load names
-    const candidates = Array.from(new Set([name, name.toLowerCase(), name[0].toUpperCase()+name.slice(1), 'Infected', 'infected']));
+    // Always include the name and case variants
+    candidates.push(name, name.toLowerCase(), name[0].toUpperCase()+name.slice(1), 'Infected', 'infected');
+    candidates = Array.from(new Set(candidates));
+
     for (const n of candidates) {
       const out = await this.execOut(`Server.Minigames.LoadPreset "${n}"`);
       if (looksLikeError(out)) warn('LoadPreset returned:', out);
@@ -304,7 +309,6 @@ module.exports = class InfectedPlugin {
     log('stopped.');
   }
 
-  // ---- events ----
   async onJoin(player) {
     try {
       if (!this.roundActive) return;
@@ -321,7 +325,6 @@ module.exports = class InfectedPlugin {
     } catch (e) { error('onJoin', e); }
   }
 
-  // ---- commands ----
   async onCommand(speaker, args) {
     const sub = (args[0] || '').toLowerCase();
     if (!sub) return this.help(speaker);
@@ -375,11 +378,11 @@ module.exports = class InfectedPlugin {
     } else {
       let ok = false;
 
-      // A) Import from plugin /data into detected presets dir and LoadPreset
+      // A) Import from plugin /data into multiple preset dirs and LoadPreset with discovery
       const imported = await this.importAndLoadPreset();
       if (imported) ok = true;
 
-      // B) LoadPreset by name anyway (in case the preset already existed under same/alt case name)
+      // B) LoadPreset by name anyway (in case the preset already existed)
       if (!ok) {
         const out = await this.execOut(`Server.Minigames.LoadPreset "${name}"`);
         if (looksLikeError(out)) warn('LoadPreset returned:', out);
@@ -423,7 +426,7 @@ module.exports = class InfectedPlugin {
       }
 
       if (!ok) {
-        this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create/load "${name}". Check console logs for detected preset dir and copy/load steps.`);
+        this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create/load "${name}". Check console logs for preset copy/list/load steps.`);
         return;
       }
     }
@@ -460,15 +463,16 @@ module.exports = class InfectedPlugin {
   }
 
   async debugListCmd(speaker) {
-    // Kept for admins; not advertised in help
     if (!(await this.isAuthorizedByName(speaker))) return;
-    const a = await this.execOut('Server.Minigames.List');
-    const b = await this.execOut('Minigame.List');
-    const c = await this.execOut('Chat.Command Minigame.List');
-    log('raw Server.Minigames.List >>>\n' + (a||'(empty)'));
-    log('raw Minigame.List >>>\n' + (b||'(empty)'));
-    log('raw Chat.Command Minigame.List >>>\n' + (c||'(empty)'));
-    this.omegga.whisper(speaker, 'Dumped raw list outputs to server console.');
+    const a = await this.execOut('Server.Minigames.ListPresets');
+    const b = await this.execOut('Server.Minigames.List');
+    const c = await this.execOut('Minigame.List');
+    const d = await this.execOut('Chat.Command Minigame.List');
+    log('ListPresets >>>\n' + (a||'(empty)'));
+    log('Server.Minigames.List >>>\n' + (b||'(empty)'));
+    log('Minigame.List >>>\n' + (c||'(empty)'));
+    log('Chat.Command Minigame.List >>>\n' + (d||'(empty)'));
+    this.omegga.whisper(speaker, 'Dumped preset + minigame lists to server console.');
   }
 
   async statusCmd(speaker) {
