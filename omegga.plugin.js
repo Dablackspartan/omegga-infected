@@ -5,7 +5,7 @@ const path = require('path');
 
 const PLUGIN_NAME = 'infected';
 const DATA_DIR = __dirname ? path.join(__dirname, 'data') : 'data';
-const DEFAULT_PRESET_SOURCE = path.join(DATA_DIR, 'Infected.bp');
+const DEFAULT_PRESET_SOURCE = path.join(DATA_DIR, 'infected.bp');
 const STATS_KEY = 'infected_stats_v1';
 
 function nowSec() { return Math.floor(Date.now() / 1000); }
@@ -26,7 +26,8 @@ function choiceIndex(arr) {
 function withDefaults(cfg) {
   const c = Object.assign({
     'authorized-users': [],
-    'minigame-name': 'Infected',
+    // If empty => derive preset/minigame name from preset-source basename (without .bp)
+    'minigame-name': '',
     'round-seconds': 300,
     'survivor-weapon': '',
     'infected-knife': '',
@@ -42,15 +43,56 @@ function withDefaults(cfg) {
     'enable-kill-tracking': false,
     'team-color-enabled': true,
     'mid-join-assign-infected': true,
-    'preset-import-enabled': true,
-    'preset-source': 'data/Infected.bp',
-    'preset-target-dir': ''
+    // Always assume preset lives in plugin /data
+    'preset-source': 'data/infected.bp'
   }, cfg || {});
 
+  // Normalize relative preset source path to plugin dir
   if (c['preset-source'] && !path.isAbsolute(c['preset-source'])) {
     c['preset-source'] = path.join(DATA_DIR, path.basename(c['preset-source']));
   }
   return c;
+}
+
+// ----- preset dir detection -----
+function candidatesForPresetDir() {
+  const paths = [];
+  const cwd = process.cwd();
+  const home = process.env.HOME || process.env.USERPROFILE;
+  const localapp = process.env.LOCALAPPDATA;
+
+  // Common dedicated layouts
+  paths.push(path.join(cwd, 'Saved', 'Presets', 'Minigames'));
+  paths.push(path.join(cwd, 'Brickadia', 'Saved', 'Presets', 'Minigames'));
+  paths.push(path.join(path.dirname(cwd), 'Saved', 'Presets', 'Minigames'));
+  paths.push(path.join('/home/container', 'Saved', 'Presets', 'Minigames'));
+  paths.push(path.join('/home/container', 'Brickadia', 'Saved', 'Presets', 'Minigames'));
+
+  // Windows user profile
+  if (localapp) paths.push(path.join(localapp, 'Brickadia', 'Saved', 'Presets', 'Minigames'));
+  // Linux launcher
+  if (home) paths.push(path.join(home, '.local', 'share', 'Brickadia', 'Saved', 'Presets', 'Minigames'));
+
+  // De-duplicate while preserving order
+  const seen = new Set();
+  return paths.filter(p => { const k = path.normalize(p); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+function resolvePresetDir() {
+  const list = candidatesForPresetDir();
+  for (const p of list) {
+    try {
+      const parent = path.dirname(p);
+      if (fs.existsSync(parent) || fs.existsSync(path.dirname(parent))) {
+        fs.mkdirSync(p, { recursive: true });
+        return p;
+      }
+    } catch (e) { /* try next */ }
+  }
+  // Last resort: create under CWD
+  const fallback = path.join(process.cwd(), 'Saved', 'Presets', 'Minigames');
+  try { fs.mkdirSync(fallback, { recursive: true }); } catch (_) {}
+  return fallback;
 }
 
 module.exports = class InfectedPlugin {
@@ -73,6 +115,7 @@ module.exports = class InfectedPlugin {
     this.boundMinigame = null;
   }
 
+  // ---- helpers for exec and minigame discovery ----
   async execOut(cmd) {
     try { return await this.omegga.exec?.(cmd); } catch { return ''; }
   }
@@ -118,6 +161,16 @@ module.exports = class InfectedPlugin {
     return list;
   }
 
+  getPresetName() {
+    let name = (this.config['minigame-name'] || '').trim();
+    if (!name) {
+      const src = (this.config['preset-source'] || DEFAULT_PRESET_SOURCE);
+      const base = path.basename(src, '.bp');
+      name = base || 'Infected';
+    }
+    return name;
+  }
+
   async ensureExistsByName(targetName) {
     const list = await this.listMinigames();
     const hit = list.find(m => m.name.toLowerCase() === String(targetName).toLowerCase());
@@ -125,7 +178,7 @@ module.exports = class InfectedPlugin {
   }
 
   async ensureBoundMinigame() {
-    const name = (this.config['minigame-name'] || 'Infected').trim() || 'Infected';
+    const name = this.getPresetName();
     const hit = await this.ensureExistsByName(name);
     if (hit) {
       this.boundMinigame = hit;
@@ -135,20 +188,16 @@ module.exports = class InfectedPlugin {
     return false;
   }
 
-  async importPresetByConfig() {
-    const name = (this.config['minigame-name'] || 'Infected').trim() || 'Infected';
+  // Copy preset into Brickadia's preset folder and load it
+  async importPreset() {
+    const name = this.getPresetName();
     const src = (this.config['preset-source'] || DEFAULT_PRESET_SOURCE);
-    const targetDir = (this.config['preset-target-dir'] || '').trim();
-    if (!targetDir) {
-      warn('preset-import enabled but preset-target-dir is not set.');
-      return false;
-    }
     try {
       if (!fs.existsSync(src)) {
         warn('preset source not found:', src);
         return false;
       }
-      fs.mkdirSync(targetDir, { recursive: true });
+      const targetDir = resolvePresetDir();
       const targetFile = path.join(targetDir, `${name}.bp`);
       fs.copyFileSync(src, targetFile);
       log('copied preset', src, '->', targetFile);
@@ -164,11 +213,12 @@ module.exports = class InfectedPlugin {
       warn('preset load verification failed (not found after load):', name);
       return false;
     } catch (e) {
-      error('importPresetByConfig', e);
+      error('importPreset', e);
       return false;
     }
   }
 
+  // ---- lifecycle ----
   async init() {
     log('initializing plugin...');
 
@@ -194,6 +244,7 @@ module.exports = class InfectedPlugin {
     log('stopped.');
   }
 
+  // ---- events ----
   async onJoin(player) {
     try {
       if (!this.roundActive) return;
@@ -210,6 +261,7 @@ module.exports = class InfectedPlugin {
     } catch (e) { error('onJoin', e); }
   }
 
+  // ---- commands ----
   async onCommand(speaker, args) {
     const sub = (args[0] || '').toLowerCase();
     if (!sub) return this.help(speaker);
@@ -217,7 +269,6 @@ module.exports = class InfectedPlugin {
     if (sub === 'status') return this.statusCmd(speaker);
     if (sub === 'createminigame') return this.createMinigameCmd(speaker);
     if (sub === 'bindminigame') return this.bindMinigameCmd(speaker, args[1], args[2]);
-    if (sub === 'importpreset') return this.importPresetCmd(speaker);
     if (sub === 'debuglist') return this.debugListCmd(speaker);
 
     if (sub === 'startround') return this.startRoundCmd(speaker);
@@ -227,13 +278,10 @@ module.exports = class InfectedPlugin {
   }
 
   async help(speaker) {
-    this.omegga.whisper(speaker, 'Infected plugin commands:');
-    this.omegga.whisper(speaker, '!infected createminigame - create/setup (or import+load) and bind to minigame (admin only)');
-    this.omegga.whisper(speaker, '!infected importpreset - copy preset from plugin /data and LoadPreset (admin only)');
-    this.omegga.whisper(speaker, '!infected bindminigame <index>  — or —  !infected bindminigame name <PresetName>');
-    this.omegga.whisper(speaker, '!infected status - show current state');
-    this.omegga.whisper(speaker, '!infected startround - start a round (admin only)');
-    this.omegga.whisper(speaker, '!infected endround - end current round (admin only)');
+    this.omegga.whisper(speaker, 'Infected commands:');
+    this.omegga.whisper(speaker, '!infected createminigame  — setup/bind (admin)');
+    this.omegga.whisper(speaker, '!infected startround / endround (admin)');
+    this.omegga.whisper(speaker, '!infected status');
   }
 
   async isAuthorizedByName(name) {
@@ -253,24 +301,25 @@ module.exports = class InfectedPlugin {
 
   async createMinigameCmd(speaker) {
     if (!(await this.isAuthorizedByName(speaker))) {
-      return this.omegga.whisper(speaker, 'You are not authorized to do that.');
+      return this.omegga.whisper(speaker, 'Not authorized.');
     }
 
-    const name = (this.config['minigame-name'] || 'Infected').trim() || 'Infected';
+    const name = this.getPresetName();
     const teams = ['Survivors', 'Infected'];
 
+    // If exists, bind and go
     const existing = await this.ensureExistsByName(name);
     if (existing) {
       this.boundMinigame = existing;
-      this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Minigame "${name}" exists (index ${existing.index}). Bound to it.`);
+      this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Using existing minigame "${name}" (index ${existing.index}).`);
     } else {
       let ok = false;
 
-      if (this.config['preset-import-enabled']) {
-        const imported = await this.importPresetByConfig();
-        if (imported) ok = true;
-      }
+      // A) Import from plugin /data and LoadPreset (auto dir discovery)
+      const imported = await this.importPreset();
+      if (imported) ok = true;
 
+      // B) LoadPreset by name anyway (in case the preset already existed under same name)
       if (!ok) {
         const out = await this.execOut(`Server.Minigames.LoadPreset "${name}"`);
         if (this.looksLikeError(out)) warn('LoadPreset returned:', out);
@@ -278,6 +327,7 @@ module.exports = class InfectedPlugin {
         if (hit) { this.boundMinigame = hit; ok = true; }
       }
 
+      // C) direct console create
       if (!ok) {
         try {
           const a = await this.execOut(`Minigame.Create "${name}"`);
@@ -289,6 +339,7 @@ module.exports = class InfectedPlugin {
         } catch (e) { error('create path A failed', e); }
       }
 
+      // D) Omegga API
       if (!ok) {
         try {
           if (typeof this.omegga.createMinigame === 'function') {
@@ -299,6 +350,7 @@ module.exports = class InfectedPlugin {
         } catch (e) { error('create path B API failed', e); }
       }
 
+      // E) Chat.Command legacy
       if (!ok) {
         try {
           const a = await this.execOut(`Chat.Command Minigame.Create "${name}"`);
@@ -311,7 +363,7 @@ module.exports = class InfectedPlugin {
       }
 
       if (!ok) {
-        this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create/load minigame "${name}". Ensure the preset exists in your server's Minigame Presets, or run <b>!infected importpreset</b> after setting the target folder in config.`);
+        this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create/load "${name}". Ensure the server can load presets and try again.`);
         return;
       }
     }
@@ -321,19 +373,8 @@ module.exports = class InfectedPlugin {
     else this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Use !infected startround to begin.');
   }
 
-  async importPresetCmd(speaker) {
-    if (!(await this.isAuthorizedByName(speaker))) {
-      return this.omegga.whisper(speaker, 'You are not authorized to do that.');
-    }
-    const ok = await this.importPresetByConfig();
-    if (ok) this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Preset imported and loaded.');
-    else this.omegga.broadcast('<b><color="ff6666">[Infected]</> Preset import failed. Check config (preset-target-dir) and that the .bp file exists.');
-  }
-
   async bindMinigameCmd(speaker, modeOrIndex, maybeName) {
-    if (!(await this.isAuthorizedByName(speaker))) {
-      return this.omegga.whisper(speaker, 'You are not authorized to do that.');
-    }
+    if (!(await this.isAuthorizedByName(speaker))) return this.omegga.whisper(speaker, 'Not authorized.');
 
     const mode = (modeOrIndex || '').toLowerCase();
 
@@ -349,16 +390,17 @@ module.exports = class InfectedPlugin {
     if (Number.isInteger(i)) {
       const list = await this.listMinigames();
       const hit = list.find(m => m.index === i);
-      if (!hit) return this.omegga.whisper(speaker, `No minigame at index ${i}. Try "!infected bindminigame name Infected".`);
+      if (!hit) return this.omegga.whisper(speaker, `No minigame at index ${i}. Try "!infected bindminigame name <name>".`);
       this.config['minigame-name'] = hit.name;
       this.boundMinigame = hit;
-      return this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Bound to minigame "${hit.name}" (index ${i}).`);
+      return this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Bound: "${hit.name}" (index ${i}).`);
     }
 
     this.omegga.whisper(speaker, 'Usage: !infected bindminigame <index>  — or —  !infected bindminigame name <PresetName>');
   }
 
   async debugListCmd(speaker) {
+    // Kept for admins; not advertised in help
     if (!(await this.isAuthorizedByName(speaker))) return;
     const a = await this.execOut('Server.Minigames.List');
     const b = await this.execOut('Minigame.List');
@@ -377,26 +419,13 @@ module.exports = class InfectedPlugin {
 
     const lines = [
       `<b><color="aaffaa">[Infected]</> Round: ${this.roundActive ? 'ACTIVE' : 'idle'} | Minigame: ${mg}`,
-      `Players tracked: ${total} | Infected: ${infectedCount} | Survivors: ${Math.max(0, total - infectedCount)}`,
-      `Timer: ${this.roundActive ? secsLeft + 's remaining' : 'n/a'}`
+      `Players: ${total} | Infected: ${infectedCount} | Survivors: ${Math.max(0, total - infectedCount)}`,
+      `Timer: ${this.roundActive ? secsLeft + 's' : 'n/a'}`
     ];
     for (const line of lines) this.omegga.whisper(speaker, line);
   }
 
-  async startRoundCmd(speaker) {
-    if (!(await this.isAuthorizedByName(speaker))) {
-      return this.omegga.whisper(speaker, 'You are not authorized to do that.');
-    }
-    await this.startRound();
-  }
-
-  async endRoundCmd(speaker, why = 'forced') {
-    if (!(await this.isAuthorizedByName(speaker))) {
-      return this.omegga.whisper(speaker, 'You are not authorized to do that.');
-    }
-    await this.endRound(why);
-  }
-
+  // ---- round logic ----
   async startRound() {
     if (this.roundActive) return;
     const pos = await this.omegga.getAllPlayerPositions?.() || [];
@@ -488,6 +517,7 @@ module.exports = class InfectedPlugin {
     if (survivorsLeft <= 0) await this.endRound('all infected');
   }
 
+  // ---- roles, loadouts, visuals ----
   async becomeInfected(playerRef, opts = {}) {
     const p = typeof playerRef === 'object' && playerRef.id ? playerRef : this.omegga.getPlayer(playerRef);
     if (!p) return;
@@ -577,6 +607,7 @@ module.exports = class InfectedPlugin {
     try { await this.omegga.exec?.(`Chat.Command PlaySound "${p.name}" "${sound}"`); } catch(e) { error('play-sound', e); }
   }
 
+  // ---- stats ----
   updateBestTime(id, name, seconds) {
     if (!id) return;
     const rec = this.stats.players[id] || { name, survivorKills: 0, zombieKills: 0, bestSurvival: 0, totalSurvival: 0, roundsPlayed: 0 };
