@@ -140,7 +140,6 @@ function locatePresetSource(explicitPath) {
 }
 
 function candidatePresetDirs() {
-  // Host-specific path provided by user (singular 'Minigame', under /data)
   const dirs = ['/home/container/data/Saved/Presets/Minigame'];
   return dirs;
 }
@@ -259,7 +258,7 @@ module.exports = class InfectedPlugin {
   return copies;
 }
 
-  \1checkForBpConflicts();
+  checkForBpConflicts();
   this.resolvedPresetPath = locatePresetSource(this.config['preset-source']);
   if (!this.resolvedPresetPath) {
     error('No preset file found in /plugins/infected/data. Expected Infected.json (preferred) or infected.bp / Infected.bp');
@@ -315,7 +314,64 @@ module.exports = class InfectedPlugin {
 }
 
   // lifecycle
-  async init() {
+  
+
+async importAndLoadPreset() {
+  if (typeof checkForBpConflicts === 'function') checkForBpConflicts();
+  this.resolvedPresetPath = locatePresetSource(this.config['preset-source']);
+  if (!this.resolvedPresetPath) {
+    error('No preset file found in /plugins/infected/data. Expected Infected.json (preferred) or infected.bp / Infected.bp');
+    return false;
+  }
+  log('using preset source:', this.resolvedPresetPath);
+
+  const name = this.getPresetName();
+  await this.multiCopyPreset(this.resolvedPresetPath, name);
+  await sleep(1200); // allow indexing
+
+  let rulesetName = null;
+  try {
+    const txt = fs.readFileSync(this.resolvedPresetPath, 'utf-8');
+    const j = JSON.parse(txt);
+    rulesetName = j?.data?.rulesetSettings?.rulesetName || null;
+  } catch {}
+
+  let candidates = [];
+  try {
+    const listed = await this.listPresetNames();
+    if (listed && listed.length) {
+      log('Server lists presets:', listed.join(', '));
+      const match = listed.find(n => n.toLowerCase() === name.toLowerCase())
+        || (rulesetName && listed.find(n => n.toLowerCase() === String(rulesetName).toLowerCase()))
+        || listed.find(n => /infected/i.test(n))
+        || listed[0];
+      if (match) candidates.push(match);
+    }
+  } catch (e) {
+    warn('ListPresets not available or failed', e);
+  }
+
+  const basics = [name, name.toLowerCase(), name[0]?.toUpperCase()+name.slice(1), 'Infected', 'infected'];
+  if (rulesetName) basics.push(String(rulesetName), String(rulesetName).toLowerCase());
+  candidates.push(...basics);
+  candidates = Array.from(new Set(candidates.filter(Boolean)));
+
+  for (const n of candidates) {
+    const out = await this.execOut(`Server.Minigames.LoadPreset "${n}"`);
+    if (looksLikeError(out)) warn('LoadPreset returned:', out);
+    await sleep(600);
+    const hit = await this.ensureExistsByName(n);
+    if (hit) {
+      this.boundMinigame = hit;
+      log('loaded & bound preset:', hit.index, hit.name);
+      return true;
+    }
+  }
+  warn('preset load verification failed for names:', candidates.join(', '));
+  return false;
+}
+
+async init() {
     log('initializing plugin...');
     await this.ensureBoundMinigame();
 
