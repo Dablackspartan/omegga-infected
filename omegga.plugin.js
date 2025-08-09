@@ -89,18 +89,14 @@ function stripOut(s){
   return s.trim();
 }
 
-async function execOut(omegga, cmd){
-  try {
-    if (omegga && typeof omegga.writeln === 'function') {
-      return await omegga.writeln(cmd);
-    }
-    // Fallback: older APIs sometimes expose 'emit' or 'broadcast' only; return empty
-    return '';
-  } catch (e) {
-    warn('execOut failed', cmd, e && e.message);
-    return '';
+function execOut(omegga, cmd){
+  if (omegga && typeof omegga.writeln === 'function') {
+    return omegga.writeln(cmd).then(function(out){ return out; }, function(e){
+      warn('execOut failed', cmd, e && e.message ? e.message : String(e || ''));
+      return '';
+    });
   }
-} catch(e){ warn('execOut failed', cmd, e && e.message); return ''; }
+  return Promise.resolve('');
 }
 
 async function listPresetNames(omegga){
