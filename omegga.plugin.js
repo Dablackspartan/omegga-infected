@@ -59,6 +59,32 @@ function looksLikeError(out='') {
   return /unknown|invalid|error|usage|not found|failed/i.test(String(out));
 }
 
+
+
+function checkForBpConflicts() {
+      const destDir = '/home/container/data/Saved/Presets/Minigame';
+      const names = ['infected', 'Infected', 'INFECTED'];
+      const found = [];
+      try {
+        const files = fs.readdirSync(destDir);
+        for (const f of files) {
+          if (/^infected.*\.bp$/i.test(f)) found.push(path.join(destDir, f));
+        }
+      } catch (_) {}
+
+      // Also check plugin data folder for legacy BP
+      try {
+        const files2 = fs.readdirSync(DATA_DIR);
+        for (const f of files2) {
+          if (/^infected.*\.bp$/i.test(f)) found.push(path.join(DATA_DIR, f));
+        }
+      } catch (_) {}
+
+      if (found.length) {
+        warn('BP preset(s) also present (JSON preferred). Consider removing to avoid confusion:', found.join(', '));
+      }
+    }
+
 function findFile(startDirs, targetBasename, maxDepth = 6) {
   const seen = new Set();
   const q = startDirs.map(d => ({d, depth:0}));
@@ -114,22 +140,10 @@ function locatePresetSource(explicitPath) {
 }
 
 function candidatePresetDirs() {
-  const cwd = process.cwd();
-  const home = process.env.HOME || process.env.USERPROFILE;
-  const localapp = process.env.LOCALAPPDATA;
-
-  const dirs = [
-    path.join(cwd, 'Saved', 'Presets', 'Minigames'),
-    path.join(cwd, 'Brickadia', 'Saved', 'Presets', 'Minigames'),
-    '/home/container/Saved/Presets/Minigames',
-    '/home/container/Brickadia/Saved/Presets/Minigames',
-  ];
-
-  if (home) dirs.push(path.join(home, '.local', 'share', 'Brickadia', 'Saved', 'Presets', 'Minigames'));
-  if (localapp) dirs.push(path.join(localapp, 'Brickadia', 'Saved', 'Presets', 'Minigames'));
-
-  const seen = new Set();
-  return dirs.filter(p => { const k = path.normalize(p); if (seen.has(k)) return false; seen.add(k); return true; });
+  // Host-specific path provided by user (singular 'Minigame', under /data)
+  const dirs = ['/home/container/data/Saved/Presets/Minigame'];
+  return dirs;
+});
 }
 
 module.exports = class InfectedPlugin {
@@ -246,7 +260,7 @@ module.exports = class InfectedPlugin {
   return copies;
 }
 
-  async importAndLoadPreset() {
+  \1checkForBpConflicts();
   this.resolvedPresetPath = locatePresetSource(this.config['preset-source']);
   if (!this.resolvedPresetPath) {
     error('No preset file found in /plugins/infected/data. Expected Infected.json (preferred) or infected.bp / Infected.bp');
