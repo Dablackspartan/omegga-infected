@@ -126,9 +126,11 @@ module.exports = class InfectedPlugin {
 
   async init(){
     // command: !infected createminigame
-    this.omegga.on('cmd:infected', async (name, sub) => {
-      if (!sub || sub.toLowerCase() !== 'createminigame') return;
-      await this.createMinigameCmd(name);
+    this.omegga.on('chatcmd:infected', async (speaker, ...args) => {
+      const sub = (args[0] || '').toLowerCase();
+      if (!sub) { this.omegga.whisper(speaker, '[Infected] usage: !infected createminigame'); return; }
+      if (sub === 'createminigame') { await this.createMinigameCmd(speaker); return; }
+      this.omegga.whisper(speaker, '[Infected] unknown subcommand: ' + sub);
     });
 
     return {registeredCommands: ['infected']};
