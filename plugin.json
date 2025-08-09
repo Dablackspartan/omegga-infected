@@ -1,13 +1,10 @@
 {
-  "name": "infected",
-  "description": "Infected/Zombies scaffold. Copies JSON preset to the correct folder and loads/creates a minigame.",
-  "author": "Evan/Helper",
-  "version": "0.8.0",
-  "formatVersion": 1,
-  "omeggaVersion": "^1.0.0",
-  "type": "node",
-  "access": [
-    "fs",
-    "path"
+  "name": "Infected / Zombies (Omegga)",
+  "author": "Dablackspartan + fixes",
+  "version": "0.2.0",
+  "description": "Creates an Infected minigame from a JSON preset and basic helper commands.",
+  "config": [],
+  "commands": [
+    "infected"
   ]
 }
