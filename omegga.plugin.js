@@ -145,15 +145,68 @@ module.exports = class InfectedPlugin {
   async stop(){}
 
   async createMinigameCmd(playerName){
-    var src = locatePresetSource(this.config['preset-source']);
-    if (!src){
-      // guarantee a placeholder json
-      var blank = path.join(DATA_DIR, 'Infected.json');
-      try{
-        if (!fs.existsSync(blank)){
-          fs.writeFileSync(blank, JSON.stringify({"formatVersion":1,"presetVersion":1,"data":{"rulesetSettings":{"rulesetName":"Infected"}}}, null, 2));
-          warn('created placeholder data/Infected.json');
-        }
+  var src = locatePresetSource(this.config['preset-source']);
+  if (!src){
+    // guarantee a placeholder json
+    var blank = path.join(DATA_DIR, 'Infected.json');
+    try{
+      if (!fs.existsSync(blank)){
+        fs.writeFileSync(blank, JSON.stringify({"formatVersion":1,"presetVersion":1,"data":{"rulesetSettings":{"rulesetName":"Infected"}}}, null, 2));
+        warn('created placeholder data/Infected.json');
+      }
+    } catch(e){ warn('could not create placeholder', e && e.message ? e.message : String(e||'')); }
+    src = blank;
+  }
+  this.resolvedPresetPath = src;
+  var name = getPresetName(src, this.config['minigame-name']);
+
+  copyPresetToDest(src, DEST_DIR, name);
+  await sleep(1500);
+
+  var candidates = [name, name.toLowerCase(), name.charAt(0).toUpperCase()+name.slice(1), 'Infected','infected'];
+  // include rulesetName if present
+  try{
+    var txt = fs.readFileSync(src, 'utf-8');
+    var j = JSON.parse(txt);
+    if (j && j.data && j.data.rulesetSettings && j.data.rulesetSettings.rulesetName){
+      var rn = String(j.data.rulesetSettings.rulesetName);
+      candidates.push(rn, rn.toLowerCase());
+    }
+  } catch(_){}
+
+  // include any "infected*" from server list
+  try{
+    var listed = await listPresetNames(this.omegga);
+    for (var i=0;i<listed.length;i++){
+      if (String(listed[i]).toLowerCase().indexOf('infected') !== -1) candidates.push(listed[i]);
+    }
+  } catch(_){}
+
+  // dedup
+  var seen = {}; var uniq = [];
+  for (var i=0;i<candidates.length;i++){
+    var k = String(candidates[i]||'').trim();
+    if (!k) continue;
+    var low = k.toLowerCase();
+    if (!seen[low]){ seen[low]=1; uniq.push(k); }
+  }
+  candidates = uniq;
+
+  this.omegga.broadcast('[Infected] trying candidates: ' + candidates.join(', '));
+
+  // Try to load each candidate
+  for (var i=0;i<candidates.length;i++){
+    var n = candidates[i];
+    await execOut(this.omegga, 'Server.Minigames.LoadPreset "' + n.replace(/"/g,'\\"') + '"');
+    await sleep(300);
+  }
+
+  // Fallback: create if not found
+  await execOut(this.omegga, 'Minigame.Create "' + name.replace(/"/g,'\\"') + '"');
+  await sleep(200);
+
+  this.omegga.broadcast('[Infected] preset copied; attempted load/create for "' + name + '". If not visible, run /writeln Server.Minigames.ListPresets to confirm.');
+}
       } catch(e){ warn('could not create placeholder', e && e.message); }
       src = blank;
     }
