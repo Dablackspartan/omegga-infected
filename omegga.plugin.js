@@ -90,7 +90,17 @@ function stripOut(s){
 }
 
 async function execOut(omegga, cmd){
-  try { return await omegga.exec(cmd); } catch(e){ warn('execOut failed', cmd, e && e.message); return ''; }
+  try {
+    if (omegga && typeof omegga.writeln === 'function') {
+      return await omegga.writeln(cmd);
+    }
+    // Fallback: older APIs sometimes expose 'emit' or 'broadcast' only; return empty
+    return '';
+  } catch (e) {
+    warn('execOut failed', cmd, e && e.message);
+    return '';
+  }
+} catch(e){ warn('execOut failed', cmd, e && e.message); return ''; }
 }
 
 async function listPresetNames(omegga){
