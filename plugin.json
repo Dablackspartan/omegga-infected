@@ -1,12 +1,11 @@
 {
-  "name": "Infected / Zombies (Omegga)",
-  "description": "Infected/Zombies gamemode with robust preset import and binding.",
-  "author": "chatgpt-assistant",
-  "version": "0.7.3",
+  "name": "infected",
+  "description": "Infected/Zombies scaffold. Copies JSON preset to the correct folder and loads/creates a minigame.",
+  "author": "Evan/Helper",
+  "version": "0.8.0",
   "formatVersion": 1,
-  "omeggaVersion": ">=0.1.32",
-  "type": "safe",
-  "emitConfig": "config.json",
+  "omeggaVersion": "^1.0.0",
+  "type": "node",
   "access": [
     "fs",
     "path"
