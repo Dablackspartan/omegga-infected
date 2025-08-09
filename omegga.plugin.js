@@ -107,14 +107,27 @@ module.exports = class InfectedPlugin {
 
     await sleep(1200);
 
-    // Attempt loads, then fallback create
+    // Attempt loads
     await writeln(this.omegga, 'Server.Minigames.LoadPreset "Infected"');
-    await sleep(300);
-    await writeln(this.omegga, 'Server.Minigames.LoadPreset "' + name.replace(/"/g,'\\"') + '"');
-    await sleep(300);
-    await writeln(this.omegga, 'Minigame.Create "' + name.replace(/"/g,'\\"') + '"');
-    await sleep(200);
+    await sleep(500);
+    await writeln(this.omegga, 'Server.Minigames.LoadPreset "' + name.replace(/"/g,'\"') + '"');
+    await sleep(500);
 
-    this.omegga.broadcast('[Infected] attempted to load/create "' + name + '". If not visible, run /writeln Server.Minigames.ListPresets');
+    // Verify by querying current minigames
+    var mg = await this.omegga.getMinigames();
+    var found = false;
+    if (mg && mg.length){
+      for (var i=0;i<mg.length;i++){
+        var n = String(mg[i].name || '').toLowerCase();
+        if (n.indexOf('infected') !== -1 || n === String(name||'').toLowerCase()){
+          found = true; break;
+        }
+      }
+    }
+    if (found){
+      this.omegga.broadcast('[Infected] loaded preset and found a minigame matching "' + name + '".');
+    } else {
+      this.omegga.broadcast('[Infected] tried to load preset "' + name + '" but did not find a minigame yet. Check Server.Minigames.List and Minigame UI.');
+    }
   }
 };
