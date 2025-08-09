@@ -143,7 +143,6 @@ function candidatePresetDirs() {
   // Host-specific path provided by user (singular 'Minigame', under /data)
   const dirs = ['/home/container/data/Saved/Presets/Minigame'];
   return dirs;
-});
 }
 
 module.exports = class InfectedPlugin {
