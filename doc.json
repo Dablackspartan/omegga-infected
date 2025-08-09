@@ -14,7 +14,7 @@
       "default": ""
     },
     "preset-source": {
-      "description": "Preset file in /data (prefers Infected.json; falls back to infected.bp / Infected.bp)",
+      "description": "Preset file in /data (blank = auto-detect infected.bp / Infected.bp)",
       "type": "string",
       "default": ""
     },

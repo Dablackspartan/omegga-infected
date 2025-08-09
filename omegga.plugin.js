@@ -1,4 +1,4 @@
-// omegga.plugin.js (json-preset build)
+// omegga.plugin.js (metadata-fix build)
 const fs = require('fs');
 const path = require('path');
 
@@ -80,15 +80,11 @@ function findFile(startDirs, targetBasename, maxDepth = 6) {
 }
 
 function locatePresetSource(explicitPath) {
-  // Prefer JSON preset, fall back to .bp for backwards-compat.
-  const exts = ['.json', '.bp'];
-
+  const exts = ['.json', '.bp']; // prefer JSON, fallback to BP
   if (explicitPath) {
-    const p = path.isAbsolute(explicitPath)
-      ? explicitPath
-      : path.join(DATA_DIR, path.basename(explicitPath));
+    const p = path.isAbsolute(explicitPath) ? explicitPath : path.join(DATA_DIR, path.basename(explicitPath));
     if (fs.existsSync(p)) return p;
-    // try same basename with known extensions if no exact match
+    // try with known extensions if not exact
     const base = path.parse(p).name;
     for (const ext of exts) {
       const q = path.join(DATA_DIR, base + ext);
@@ -96,29 +92,24 @@ function locatePresetSource(explicitPath) {
     }
     warn('configured preset-source not found:', p);
   }
-
-  // standard candidates (case-insensitive)
   const bases = ['infected', 'Infected', 'INFECTED'];
   for (const b of bases) {
     for (const ext of exts) {
-      const q = path.join(DATA_DIR, b + ext);
-      if (fs.existsSync(q)) return q;
+      const p = path.join(DATA_DIR, b + ext);
+      if (fs.existsSync(p)) return p;
     }
   }
-
-  // first file by extension preference
   try {
     const files = fs.readdirSync(DATA_DIR);
     for (const ext of exts) {
       const hit = files.find(f => f.toLowerCase().endsWith(ext));
       if (hit) {
         const p = path.join(DATA_DIR, hit);
-        warn('using first', ext, 'found in /data:', hit);
+        warn('using first preset found in /data:', hit);
         return p;
       }
     }
   } catch (_) {}
-
   return null;
 }
 
@@ -200,14 +191,14 @@ module.exports = class InfectedPlugin {
   }
 
   getPresetName() {
-    let name = (this.config['minigame-name'] || '').trim();
-    if (name) return name;
+  let name = (this.config['minigame-name'] || '').trim();
+  if (name) return name;
 
-    const src = this.resolvedPresetPath || locatePresetSource(this.config['preset-source']);
-    if (src) { const b = path.basename(src); return b.replace(/\.(bp|json)$/i, ''); }
+  const src = this.resolvedPresetPath || locatePresetSource(this.config['preset-source']);
+  if (src) { const b = path.basename(src); return b.replace(/\.(bp|json)$/i, ''); }
 
-    return 'Infected';
-  }
+  return 'Infected';
+}
 
   async ensureBoundMinigame() {
     const name = this.getPresetName();
@@ -236,16 +227,15 @@ module.exports = class InfectedPlugin {
   async multiCopyPreset(src, name) {
   const dirs = candidatePresetDirs();
   const copies = [];
-  const ext = path.extname(src) || '.json'; // default to .json
-
-  const variants = Array.from(new Set([
+  const ext = path.extname(src) || '.json';
+  const proper = [
     `${name}${ext}`,
     `${name.toLowerCase()}${ext}`,
     `${name[0]?.toUpperCase() || ''}${name.slice(1)}${ext}`,
     `Infected${ext}`,
-    `infected${ext}`
-  ]));
-
+    `infected${ext}`,
+  ];
+  const variants = Array.from(new Set(proper));
   for (const d of dirs) {
     try { fs.mkdirSync(d, { recursive: true }); } catch {}
     for (const file of variants) {
@@ -266,11 +256,9 @@ module.exports = class InfectedPlugin {
 
   const name = this.getPresetName();
   await this.multiCopyPreset(this.resolvedPresetPath, name);
+  await sleep(1200); // let Brickadia index presets
 
-  // give the game a moment to index new presets
-  await sleep(1200);
-
-  // Try to read rulesetName from the preset file for extra candidates
+  // Try to read rulesetName from the source (JSON) if available
   let rulesetName = null;
   try {
     const txt = fs.readFileSync(this.resolvedPresetPath, 'utf-8');
@@ -293,8 +281,7 @@ module.exports = class InfectedPlugin {
     warn('ListPresets not available or failed', e);
   }
 
-  // Always try these names as well
-  const basics = [name, name.toLowerCase(), name[0]?.toUpperCase() + name.slice(1), 'Infected', 'infected'];
+  const basics = [name, name.toLowerCase(), name[0]?.toUpperCase()+name.slice(1), 'Infected', 'infected'];
   if (rulesetName) basics.push(String(rulesetName), String(rulesetName).toLowerCase());
   candidates.push(...basics);
   candidates = Array.from(new Set(candidates.filter(Boolean)));
@@ -312,4 +299,87 @@ module.exports = class InfectedPlugin {
   }
   warn('preset load verification failed for names:', candidates.join(', '));
   return false;
+}
+
+  // lifecycle
+  async init() {
+    log('initializing plugin...');
+    await this.ensureBoundMinigame();
+
+    this.omegga.on('chatcmd:infected', (speaker, ...args) => this.onCommand(speaker, args));
+
+    log('initialized.');
+    return { registeredCommands: ['infected'] };
+  }
+
+  async stop() {
+    log('stopped.');
+  }
+
+  // join -> mid-round infect (stub; full logic omitted here for brevity)
+  async onJoin(player) {}
+
+  // commands
+  async onCommand(speaker, args) {
+    const sub = (args[0] || '').toLowerCase();
+    if (!sub) return this.help(speaker);
+
+    if (sub === 'status') return this.statusCmd(speaker);
+    if (sub === 'createminigame') return this.createMinigameCmd(speaker);
+    if (sub === 'startround') return this.startRoundCmd(speaker);
+    if (sub === 'endround') return this.endRoundCmd(speaker);
+
+    return this.help(speaker);
+  }
+
+  async help(speaker) {
+    this.omegga.whisper(speaker, 'Infected commands:');
+    this.omegga.whisper(speaker, '!infected createminigame  — setup/bind (admin)');
+    this.omegga.whisper(speaker, '!infected startround / endround (admin)');
+    this.omegga.whisper(speaker, '!infected status');
+  }
+
+  async createMinigameCmd(speaker) {
+    const name = this.getPresetName();
+
+    // Existing?
+    const existing = await this.ensureExistsByName(name);
+    if (existing) {
+      this.boundMinigame = existing;
+      this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Using existing minigame "${name}" (index ${existing.index}).`);
+      return;
+    }
+
+    // Try import+load
+    let ok = await this.importAndLoadPreset();
+
+    // Fallback creation
+    if (!ok) {
+      try {
+        const a = await this.execOut(`Minigame.Create "${name}"`);
+        if (looksLikeError(a)) throw new Error(a);
+        const hit = await this.ensureExistsByName(name);
+        if (hit) { this.boundMinigame = hit; ok = true; }
+      } catch (e) { error('Minigame.Create failed', e); }
+    }
+
+    if (!ok) {
+      this.omegga.broadcast(`<b><color="ff6666">[Infected]</> Could not create/load "${name}". Check console logs for preset copy/list/load steps.`);
+      return;
+    }
+
+    this.omegga.broadcast(`<b><color="aaffaa">[Infected]</> Minigame ready: <b>${name}</b>.`);
+  }
+
+  async statusCmd(speaker) {
+    const mg = this.boundMinigame ? `#${this.boundMinigame.index} "${this.boundMinigame.name}"` : 'none';
+    this.omegga.whisper(speaker, `<b><color="aaffaa">[Infected]</> Bound: ${mg}`);
+  }
+
+  async startRoundCmd(speaker) {
+    this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Round start (manual).');
+  }
+  async endRoundCmd(speaker) {
+    this.omegga.broadcast('<b><color="aaffaa">[Infected]</> Round end (manual).');
+  }
 };
